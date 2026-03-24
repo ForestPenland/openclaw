@@ -31,8 +31,7 @@ from stacks.gateway_stack import GatewayStack  # noqa: E402
 from stacks.identity_stack import IdentityStack  # noqa: E402
 from stacks.api_stack import ApiStack  # noqa: E402
 
-# Future stacks (uncomment as implemented):
-# from stacks.memory_stack import MemoryStack
+from stacks.memory_stack import MemoryStack
 from stacks.scheduler_stack import SchedulerStack
 from stacks.builder_stack import BuilderStack
 
@@ -67,10 +66,10 @@ api = ApiStack(
 api.add_dependency(storage)
 api.add_dependency(identity)
 
-# --- Future stacks (uncomment as implemented) ---
+# --- Phase 5–7 stacks ---
 
-# memory = MemoryStack(app, "OpenClawMemory")
-# memory.add_dependency(storage)
+memory = MemoryStack(app, "OpenClawMemory")
+memory.add_dependency(storage)
 
 scheduler = SchedulerStack(
     app,

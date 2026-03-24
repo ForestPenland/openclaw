@@ -456,11 +456,11 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Assert Permission Boundary denies `iam:*`, `organizations:*`, `account:*`, `aws-portal:*`, `budgets:*`, `ce:*`, `cur:*`
     - _Requirements: 10.6_
 
-- [-] 24. Checkpoint — Verify Phase 6 agents
+- [x] 24. Checkpoint — Verify Phase 6 agents
   - Ensure all tests pass for Supervisor Agent, Builder Sub-Agent, and Builder Stack. Commit: `feat: phase 6 supervisor agent, builder sub-agent, multi-agent orchestration`. Ask the user if questions arise.
 
 - [ ] 25. Phase 7 — Observability & Production Hardening
-  - [~] 25.1 Implement CloudWatch dashboard and alarms
+  - [x] 25.1 Implement CloudWatch dashboard and alarms
     - Create dashboard: messages/hour, Bedrock token usage, memory ops count, active sessions, error rate, builder deployment count
     - Alarm: agent unresponsive >5 minutes → SNS notification
     - Alarm: Bedrock error rate >5% over 5-minute window → SNS notification
@@ -468,13 +468,13 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Alarm: heartbeat not fired within 35 minutes → missed-heartbeat alarm
     - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.5_
 
-  - [~] 25.2 Implement circuit breaker for Bedrock API calls
+  - [x] 25.2 Implement circuit breaker for Bedrock API calls
     - Closed (normal): all calls go through
     - Open (after 5 consecutive failures in 1 minute): reject calls for 30 seconds
     - Half-open (after cooldown): allow one test call; if success, close circuit
     - _Requirements: 2.4 (error handling enhancement)_
 
-  - [~] 25.3 Implement CDK Memory Stack (`infra/stacks/memory_stack.py`)
+  - [x] 25.3 Implement CDK Memory Stack (`infra/stacks/memory_stack.py`)
     - AgentCore Memory store configuration
     - Memory Consolidation Lambda with nightly trigger
     - _Requirements: 3.4, 4.1_
@@ -491,14 +491,14 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - _Requirements: 15.1, 15.2, 15.3, 15.4, 15.5_
 
 - [ ] 26. Phase 7 — Integration Wiring & Final Assembly
-  - [~] 26.1 Wire all adapters into OpenClaw Gateway startup
+  - [x] 26.1 Wire all adapters into OpenClaw Gateway startup
     - Provider-based adapter selection: `bedrock` → S3 Workspace + Bedrock Model + AgentCore Memory; `anthropic` → native local paths
     - Inject Model Router into Bedrock Model Adapter
     - Connect Supervisor Agent to messaging handlers and memory
     - Connect structured logging to all components
     - _Requirements: 2.7, 3.5, 17.1, 19.1_
 
-  - [~] 26.2 Wire CDK app to deploy all stacks
+  - [x] 26.2 Wire CDK app to deploy all stacks
     - Ensure `infra/app.py` instantiates all 7 stacks: Gateway, API, Storage, Memory, Identity, Scheduler, Builder
     - Verify `cdk deploy --all` works from `infra/` directory
     - _Requirements: 16.1, 16.4, 16.5_
@@ -507,7 +507,7 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Verify `cdk synth` produces valid CloudFormation templates for all stacks
     - _Requirements: 16.1, 16.4_
 
-- [~] 27. Final Checkpoint — Full test suite and final commit
+- [-] 27. Final Checkpoint — Full test suite and final commit
   - Ensure all unit tests, property tests, and CDK assertion tests pass. Run `cdk synth` to validate all templates. Commit: `feat: phase 7 observability, production hardening, full integration`. Ask the user if questions arise.
 
 ## Notes
