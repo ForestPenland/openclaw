@@ -108,8 +108,24 @@ class GatewayStack(Stack):
         )
 
         # --- Container Definition ---
-        # The container entrypoint syncs workspace files from S3 before
-        # starting the OpenClaw Gateway process (Requirement 5.3).
+        # The container entrypoint installs the AWS CLI and curl (missing
+        # from node:22-slim), syncs workspace files from S3, then starts
+        # the OpenClaw Gateway process (Requirement 5.3).
+        #
+        # NOTE: node:22-slim is Debian-based but ships without aws-cli or
+        # curl.  We install them at startup so the S3 sync and health
+        # check work.  For production, consider building a custom image
+        # with these baked in to avoid the ~15 s install overhead.
+        startup_script = (
+            "apt-get update -qq && apt-get install -y -qq curl unzip > /dev/null"
+            " && curl -sL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awscli.zip"
+            " && unzip -q /tmp/awscli.zip -d /tmp"
+            " && /tmp/aws/install"
+            " && rm -rf /tmp/awscli.zip /tmp/aws"
+            " && aws s3 sync s3://$WORKSPACE_BUCKET/ /workspace/"
+            " && node /app/gateway.js"
+        )
+
         self.container = self.task_definition.add_container(
             "GatewayContainer",
             image=ecs.ContainerImage.from_registry("public.ecr.aws/docker/library/node:22-slim"),
@@ -120,18 +136,14 @@ class GatewayStack(Stack):
             environment={
                 "WORKSPACE_BUCKET": workspace_bucket.bucket_name,
             },
-            command=[
-                "sh",
-                "-c",
-                "aws s3 sync s3://$WORKSPACE_BUCKET/ /workspace/ && node /app/gateway.js",
-            ],
+            command=["sh", "-c", startup_script],
             essential=True,
             health_check=ecs.HealthCheck(
                 command=["CMD-SHELL", "curl -f http://localhost:18789/health || exit 1"],
                 interval=Duration.seconds(30),
                 timeout=Duration.seconds(5),
                 retries=3,
-                start_period=Duration.seconds(60),
+                start_period=Duration.seconds(120),
             ),
         )
 
