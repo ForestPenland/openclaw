@@ -6,7 +6,7 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
 
 ## Tasks
 
-- [ ] 1. Phase 0 — Local OpenClaw Verification & Project Scaffolding
+- [x] 1. Phase 0 — Local OpenClaw Verification & Project Scaffolding
   - [x] 1.1 Create directory structure for AWS extension code
     - Create `adapters/`, `agents/`, `lambdas/`, `infra/stacks/`, `infra/constructs/`, `tests/unit/adapters/`, `tests/unit/lambdas/`, `tests/unit/agents/`, `tests/unit/messaging/`, `tests/property/`, `workspace-seeds/`, `scripts/`
     - Create placeholder `workspace-seeds/SOUL.md`, `MEMORY.md`, `HEARTBEAT.md`, `AGENTS.md`, `TOOLS.md`, `USER.md`, `IDENTITY.md` with minimal markdown content
@@ -28,11 +28,11 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Accepts `--memory-store-id`, `--agent-id`, `--workspace-path` CLI arguments
     - _Requirements: 19.4_
 
-- [-] 2. Checkpoint — Verify Phase 0 scaffolding
+- [x] 2. Checkpoint — Verify Phase 0 scaffolding
   - Ensure directory structure is correct, scripts are executable, workspace seed files exist. Commit: `feat: phase 0 scaffolding and local verification scripts`. Ask the user if questions arise.
 
-- [ ] 3. Phase 1 — S3 Workspace Adapter
-  - [~] 3.1 Implement S3 Workspace Adapter (`adapters/s3-workspace.ts`)
+- [x] 3. Phase 1 — S3 Workspace Adapter
+  - [x] 3.1 Implement S3 Workspace Adapter (`adapters/s3-workspace.ts`)
     - Implement `WorkspaceAdapter` interface: `syncFromS3`, `readFile`, `writeFile`, `listFiles`
     - On startup: `GetObject` for each file in `{tenantId}/{agentId}/` prefix → write to local path
     - On write (MEMORY.md, HEARTBEAT.md): write local first, then `PutObject` to S3 (fire-and-forget with error logging)
@@ -59,8 +59,8 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Test empty workspace (no files in prefix)
     - _Requirements: 1.1, 1.2, 1.3, 1.4_
 
-- [ ] 4. Phase 1 — Bedrock Model Adapter
-  - [~] 4.1 Implement Bedrock Model Adapter (`adapters/bedrock-model.ts`)
+- [x] 4. Phase 1 — Bedrock Model Adapter
+  - [x] 4.1 Implement Bedrock Model Adapter (`adapters/bedrock-model.ts`)
     - Implement `ModelAdapter` interface: `invoke`, `invokeStream`
     - Every call includes `guardrailConfig` from environment config
     - Cross-region inference: model IDs prefixed with `us.` passed through as-is
@@ -85,8 +85,8 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Test provider=anthropic bypass
     - _Requirements: 2.1, 2.2, 2.4, 2.7_
 
-- [ ] 5. Phase 1 — Model Router
-  - [~] 5.1 Implement Model Router (`adapters/model-router.ts`)
+- [x] 5. Phase 1 — Model Router
+  - [x] 5.1 Implement Model Router (`adapters/model-router.ts`)
     - Implement `ModelRouter` interface: `selectModel`
     - Routing rules: consolidation → Haiku; simple patterns + <500 chars → Haiku; complex patterns → Opus; default → Sonnet
     - Use regex patterns from design: `SIMPLE_PATTERNS`, `COMPLEX_PATTERNS`, `CHAR_THRESHOLD`, `MODEL_MAP`
@@ -102,7 +102,7 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Test pattern matching edge cases
     - _Requirements: 14.1, 14.2, 14.3, 14.4_
 
-- [ ] 6. Checkpoint — Verify Phase 1 adapters
+- [-] 6. Checkpoint — Verify Phase 1 adapters
   - Ensure all tests pass for S3 Workspace Adapter, Bedrock Model Adapter, and Model Router. Commit: `feat: phase 1 S3 workspace, Bedrock model, and model router adapters`. Ask the user if questions arise.
 
 - [ ] 7. Phase 2 — AgentCore Memory Adapter
