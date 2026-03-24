@@ -1,0 +1,127 @@
+# syntax=docker/dockerfile:1.7
+#
+# OpenClaw Gateway — AWS Fargate image
+#
+# Extends the upstream multi-stage build with AWS CLI for S3 workspace sync.
+# Built automatically by CDK via ContainerImage.from_asset().
+#
+# Usage (standalone):
+#   docker build -f Dockerfile.gateway -t openclaw-gateway .
+#
+# Usage (CDK):
+#   CDK builds and pushes to ECR automatically during `cdk deploy`.
+
+ARG OPENCLAW_NODE_BOOKWORM_IMAGE="node:24-bookworm@sha256:3a09aa6354567619221ef6c45a5051b671f953f0a1924d1f819ffb236e520e6b"
+
+# ── Stage 1: Build ──────────────────────────────────────────────
+FROM ${OPENCLAW_NODE_BOOKWORM_IMAGE} AS build
+
+RUN set -eux; \
+    for attempt in 1 2 3 4 5; do \
+      if curl --retry 5 --retry-all-errors --retry-delay 2 -fsSL https://bun.sh/install | bash; then \
+        break; \
+      fi; \
+      if [ "$attempt" -eq 5 ]; then exit 1; fi; \
+      sleep $((attempt * 2)); \
+    done
+ENV PATH="/root/.bun/bin:${PATH}"
+
+RUN corepack enable
+
+WORKDIR /app
+
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
+COPY ui/package.json ./ui/package.json
+COPY patches ./patches
+
+RUN --mount=type=cache,id=openclaw-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked \
+    NODE_OPTIONS=--max-old-space-size=2048 pnpm install --frozen-lockfile
+
+COPY . .
+
+RUN for dir in /app/extensions /app/.agent /app/.agents; do \
+      if [ -d "$dir" ]; then \
+        find "$dir" -type d -exec chmod 755 {} +; \
+        find "$dir" -type f -exec chmod 644 {} +; \
+      fi; \
+    done
+
+RUN pnpm canvas:a2ui:bundle || \
+    (echo "A2UI bundle: creating stub (non-fatal)" && \
+     mkdir -p src/canvas-host/a2ui && \
+     echo "/* stub */" > src/canvas-host/a2ui/a2ui.bundle.js && \
+     echo "stub" > src/canvas-host/a2ui/.bundle.hash)
+
+RUN pnpm build:docker
+ENV OPENCLAW_PREFER_PNPM=1
+RUN pnpm ui:build
+
+# Prune dev deps
+FROM build AS runtime-assets
+RUN CI=true pnpm prune --prod && \
+    find dist -type f \( -name '*.d.ts' -o -name '*.d.mts' -o -name '*.d.cts' -o -name '*.map' \) -delete
+
+# ── Stage 2: Runtime ────────────────────────────────────────────
+FROM ${OPENCLAW_NODE_BOOKWORM_IMAGE}
+
+LABEL org.opencontainers.image.title="OpenClaw Gateway (AWS)" \
+      org.opencontainers.image.description="OpenClaw gateway for AWS Fargate with S3 workspace sync"
+
+WORKDIR /app
+
+# System deps: curl for general use, unzip + awscli for S3 workspace sync
+RUN --mount=type=cache,id=gw-apt-cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,id=gw-apt-lists,target=/var/lib/apt,sharing=locked \
+    apt-get update && \
+    DEBIAN_FRONTEND=noninteractive apt-get upgrade -y --no-install-recommends && \
+    DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+      procps hostname curl git lsof openssl unzip && \
+    curl -sL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o /tmp/awscli.zip && \
+    unzip -q /tmp/awscli.zip -d /tmp && \
+    /tmp/aws/install && \
+    rm -rf /tmp/awscli.zip /tmp/aws
+
+RUN chown node:node /app
+
+# Copy built application from build stage
+COPY --from=runtime-assets --chown=node:node /app/dist ./dist
+COPY --from=runtime-assets --chown=node:node /app/node_modules ./node_modules
+COPY --from=runtime-assets --chown=node:node /app/package.json .
+COPY --from=runtime-assets --chown=node:node /app/openclaw.mjs .
+COPY --from=runtime-assets --chown=node:node /app/extensions ./extensions
+COPY --from=runtime-assets --chown=node:node /app/skills ./skills
+COPY --from=runtime-assets --chown=node:node /app/docs ./docs
+
+# Copy our AWS adapters and workspace seeds
+COPY --chown=node:node adapters ./adapters
+COPY --chown=node:node agents ./agents
+COPY --chown=node:node workspace-seeds ./workspace-seeds
+
+ENV OPENCLAW_BUNDLED_PLUGINS_DIR=/app/extensions
+ENV COREPACK_HOME=/usr/local/share/corepack
+RUN install -d -m 0755 "$COREPACK_HOME" && \
+    corepack enable && \
+    for attempt in 1 2 3 4 5; do \
+      if corepack prepare "$(node -p "require('./package.json').packageManager")" --activate; then \
+        break; \
+      fi; \
+      if [ "$attempt" -eq 5 ]; then exit 1; fi; \
+      sleep $((attempt * 2)); \
+    done && \
+    chmod -R a+rX "$COREPACK_HOME"
+
+RUN ln -sf /app/openclaw.mjs /usr/local/bin/openclaw && \
+    chmod 755 /app/openclaw.mjs
+
+# Entrypoint script: sync workspace from S3, then start gateway
+COPY --chown=node:node infra/docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod 755 /app/docker-entrypoint.sh
+
+ENV NODE_ENV=production
+
+USER node
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=3 \
+  CMD node -e "fetch('http://127.0.0.1:18789/healthz').then((r)=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+
+ENTRYPOINT ["/app/docker-entrypoint.sh"]

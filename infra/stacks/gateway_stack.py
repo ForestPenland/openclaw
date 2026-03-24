@@ -1,7 +1,16 @@
 """CDK Gateway Stack — ECS Fargate deployment for OpenClaw Gateway.
 
+Builds a custom Docker image (Dockerfile.gateway) containing the full
+OpenClaw application, AWS CLI, and an entrypoint that syncs workspace
+files from S3 before starting the gateway.
+
+CDK builds the image locally and pushes it to an ECR repository
+managed by the CDK bootstrap stack.
+
 Requirements: 5.1, 5.2, 5.3, 5.4, 5.5
 """
+
+import os
 
 from aws_cdk import (
     Duration,
@@ -14,6 +23,11 @@ from aws_cdk import aws_logs as logs
 from aws_cdk import aws_s3 as s3
 from aws_cdk import aws_dynamodb as dynamodb
 from constructs import Construct
+
+# Path to the OpenClaw project root (one level above infra/)
+_PROJECT_ROOT = os.path.normpath(
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..")
+)
 
 
 class GatewayStack(Stack):
@@ -45,10 +59,11 @@ class GatewayStack(Stack):
         )
 
         # --- CloudWatch Log Group ---
+        # Let CloudWatch auto-name the log group to avoid conflicts with
+        # orphaned log groups from previous failed deployments.
         self.log_group = logs.LogGroup(
             self,
             "GatewayLogGroup",
-            log_group_name="/ecs/openclaw-gateway",
             retention=logs.RetentionDays.TWO_WEEKS,
         )
 
@@ -59,12 +74,14 @@ class GatewayStack(Stack):
             vpc=self.vpc,
         )
 
-        # --- Task Definition (512 CPU, 1024 MiB) ---
+        # --- Task Definition (1024 CPU, 2048 MiB) ---
+        # Bumped from 512/1024 — the gateway + Node.js runtime + S3 sync
+        # needs headroom to avoid OOM during workspace assembly.
         self.task_definition = ecs.FargateTaskDefinition(
             self,
             "GatewayTaskDef",
-            cpu=512,
-            memory_limit_mib=1024,
+            cpu=1024,
+            memory_limit_mib=2048,
             runtime_platform=ecs.RuntimePlatform(
                 cpu_architecture=ecs.CpuArchitecture.X86_64,
                 operating_system_family=ecs.OperatingSystemFamily.LINUX,
@@ -107,43 +124,38 @@ class GatewayStack(Stack):
             )
         )
 
-        # --- Container Definition ---
-        # The container entrypoint installs the AWS CLI and curl (missing
-        # from node:22-slim), syncs workspace files from S3, then starts
-        # the OpenClaw Gateway process (Requirement 5.3).
-        #
-        # NOTE: node:22-slim is Debian-based but ships without aws-cli or
-        # curl.  We install them at startup so the S3 sync and health
-        # check work.  For production, consider building a custom image
-        # with these baked in to avoid the ~15 s install overhead.
-        startup_script = (
-            "apt-get update -qq && apt-get install -y -qq curl unzip > /dev/null"
-            " && curl -sL https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip -o /tmp/awscli.zip"
-            " && unzip -q /tmp/awscli.zip -d /tmp"
-            " && /tmp/aws/install"
-            " && rm -rf /tmp/awscli.zip /tmp/aws"
-            " && aws s3 sync s3://$WORKSPACE_BUCKET/ /workspace/"
-            " && node /app/gateway.js"
+        # --- Container Image (custom build) ---
+        # CDK builds Dockerfile.gateway from the project root, pushes to
+        # ECR, and references the image in the task definition.
+        gateway_image = ecs.ContainerImage.from_asset(
+            _PROJECT_ROOT,
+            file="Dockerfile.gateway",
         )
 
+        # --- Container Definition ---
         self.container = self.task_definition.add_container(
             "GatewayContainer",
-            image=ecs.ContainerImage.from_registry("public.ecr.aws/docker/library/node:22-slim"),
+            image=gateway_image,
             logging=ecs.LogDrivers.aws_logs(
                 stream_prefix="openclaw-gateway",
                 log_group=self.log_group,
             ),
             environment={
                 "WORKSPACE_BUCKET": workspace_bucket.bucket_name,
+                "TENANT_ID": "default-tenant",
+                "AGENT_ID": "default-agent",
+                "PROVIDER": "bedrock",
             },
-            command=["sh", "-c", startup_script],
             essential=True,
             health_check=ecs.HealthCheck(
-                command=["CMD-SHELL", "curl -f http://localhost:18789/health || exit 1"],
+                command=[
+                    "CMD-SHELL",
+                    'node -e "fetch(\'http://127.0.0.1:18789/healthz\').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"',
+                ],
                 interval=Duration.seconds(30),
                 timeout=Duration.seconds(5),
                 retries=3,
-                start_period=Duration.seconds(120),
+                start_period=Duration.seconds(60),
             ),
         )
 
