@@ -34,7 +34,7 @@ from stacks.api_stack import ApiStack  # noqa: E402
 # Future stacks (uncomment as implemented):
 # from stacks.memory_stack import MemoryStack
 from stacks.scheduler_stack import SchedulerStack
-# from stacks.builder_stack import BuilderStack
+from stacks.builder_stack import BuilderStack
 
 app = cdk.App()
 
@@ -80,7 +80,7 @@ scheduler = SchedulerStack(
 )
 scheduler.add_dependency(storage)
 
-# builder = BuilderStack(app, "OpenClawBuilder")
-# builder.add_dependency(storage)
+builder = BuilderStack(app, "OpenClawBuilder")
+builder.add_dependency(storage)
 
 app.synth()

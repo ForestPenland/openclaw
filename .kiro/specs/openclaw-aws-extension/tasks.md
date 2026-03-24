@@ -385,11 +385,11 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Assert nightly consolidation rule at 0 2 * * ? * UTC
     - _Requirements: 7.1, 7.5_
 
-- [-] 21. Checkpoint — Verify Phase 5 scheduling
+- [x] 21. Checkpoint — Verify Phase 5 scheduling
   - Ensure all tests pass for heartbeat handler, scheduling, and scheduler stack. Commit: `feat: phase 5 EventBridge scheduling, heartbeat, and nightly consolidation`. Ask the user if questions arise.
 
 - [ ] 22. Phase 6 — Supervisor Agent
-  - [~] 22.1 Implement Supervisor Agent (`agents/supervisor.ts`)
+  - [x] 22.1 Implement Supervisor Agent (`agents/supervisor.ts`)
     - Implement `SupervisorAgent.process` method
     - Receive all incoming messages, decide whether to handle directly or delegate
     - Delegation depth capped at 2 (supervisor → specialist, no further)
@@ -416,7 +416,7 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - _Requirements: 9.1, 9.2, 9.3, 9.4, 9.5, 9.6_
 
 - [ ] 23. Phase 6 — Builder Sub-Agent
-  - [~] 23.1 Implement Builder Sub-Agent (`agents/builder.py`)
+  - [x] 23.1 Implement Builder Sub-Agent (`agents/builder.py`)
     - Implement `BuilderAgent` class: `generate_cdk`, `test_and_deploy`, `deploy_lambda`
     - Generate CDK Python code from natural language instruction
     - Test via Code Interpreter, run `cdk synth`, then `cdk deploy`
@@ -448,7 +448,7 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Test retry logic (up to 3 iterations on test failure)
     - _Requirements: 10.1, 10.2, 10.4, 10.7, 11.1, 11.2, 11.3, 11.4_
 
-  - [~] 23.6 Implement CDK Builder Stack (`infra/stacks/builder_stack.py`)
+  - [x] 23.6 Implement CDK Builder Stack (`infra/stacks/builder_stack.py`)
     - Create Builder agent IAM role with Permission Boundary denying IAM, Organizations, Account, Billing actions
     - _Requirements: 10.6_
 
@@ -456,7 +456,7 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Assert Permission Boundary denies `iam:*`, `organizations:*`, `account:*`, `aws-portal:*`, `budgets:*`, `ce:*`, `cur:*`
     - _Requirements: 10.6_
 
-- [~] 24. Checkpoint — Verify Phase 6 agents
+- [-] 24. Checkpoint — Verify Phase 6 agents
   - Ensure all tests pass for Supervisor Agent, Builder Sub-Agent, and Builder Stack. Commit: `feat: phase 6 supervisor agent, builder sub-agent, multi-agent orchestration`. Ask the user if questions arise.
 
 - [ ] 25. Phase 7 — Observability & Production Hardening
