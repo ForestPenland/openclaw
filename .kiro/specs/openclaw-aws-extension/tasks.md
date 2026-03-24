@@ -102,11 +102,11 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Test pattern matching edge cases
     - _Requirements: 14.1, 14.2, 14.3, 14.4_
 
-- [-] 6. Checkpoint — Verify Phase 1 adapters
+- [x] 6. Checkpoint — Verify Phase 1 adapters
   - Ensure all tests pass for S3 Workspace Adapter, Bedrock Model Adapter, and Model Router. Commit: `feat: phase 1 S3 workspace, Bedrock model, and model router adapters`. Ask the user if questions arise.
 
-- [ ] 7. Phase 2 — AgentCore Memory Adapter
-  - [~] 7.1 Implement AgentCore Memory Adapter (`adapters/agentcore_memory.py`)
+- [x] 7. Phase 2 — AgentCore Memory Adapter
+  - [x] 7.1 Implement AgentCore Memory Adapter (`adapters/agentcore_memory.py`)
     - Implement `AgentCoreMemoryAdapter` class: `__init__`, `ingest`, `retrieve`, `create_store`
     - Ingest: store user message + agent response as conversation events after each turn
     - Retrieve: semantic search using current user message, return up to 10 records
@@ -131,8 +131,8 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Test inactive state in local mode
     - _Requirements: 3.1, 3.2, 3.3, 3.4, 3.5_
 
-- [ ] 8. Phase 2 — Memory Consolidation Lambda
-  - [~] 8.1 Implement Memory Consolidation Lambda (`lambdas/memory_consolidation.py`)
+- [x] 8. Phase 2 — Memory Consolidation Lambda
+  - [x] 8.1 Implement Memory Consolidation Lambda (`lambdas/memory_consolidation.py`)
     - Retrieve all memories from past 24 hours via AgentCore Memory
     - Read current MEMORY.md from S3
     - Invoke Claude Haiku to produce updated MEMORY.md (≤100 lines)
@@ -157,11 +157,11 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Test SNS alert on failure
     - _Requirements: 4.1, 4.2, 4.3, 4.4, 4.5_
 
-- [ ] 9. Checkpoint — Verify Phase 2 memory components
+- [x] 9. Checkpoint — Verify Phase 2 memory components
   - Ensure all tests pass for AgentCore Memory Adapter and Memory Consolidation Lambda. Commit: `feat: phase 2 AgentCore memory adapter and consolidation lambda`. Ask the user if questions arise.
 
-- [ ] 10. Phase 3 — CDK Storage Stack
-  - [~] 10.1 Implement CDK Storage Stack (`infra/stacks/storage_stack.py`)
+- [x] 10. Phase 3 — CDK Storage Stack
+  - [x] 10.1 Implement CDK Storage Stack (`infra/stacks/storage_stack.py`)
     - Create versioned S3 bucket for workspace files with key structure `{tenantId}/{agentId}/{filename}`
     - Create separate S3 bucket for skills registry with `BlockPublicAccess.BLOCK_ALL`
     - Create S3 bucket for artifacts
@@ -179,8 +179,8 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Assert TTL attributes configured on sessions, dedup, and connections tables
     - _Requirements: 13.1, 13.2, 13.3, 13.4, 13.5, 13.6_
 
-- [ ] 11. Phase 3 — CDK Gateway Stack & ECS Fargate
-  - [~] 11.1 Implement CDK Gateway Stack (`infra/stacks/gateway_stack.py`)
+- [x] 11. Phase 3 — CDK Gateway Stack & ECS Fargate
+  - [x] 11.1 Implement CDK Gateway Stack (`infra/stacks/gateway_stack.py`)
     - Deploy OpenClaw Gateway as single Fargate task: 512 CPU units, 1024 MiB memory
     - Configure ECS task role with permissions for S3, Bedrock, DynamoDB, AgentCore
     - Configure CloudWatch log streaming with `openclaw-gateway` log prefix
@@ -195,8 +195,8 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Assert ECS service has desired count and health check
     - _Requirements: 5.1, 5.2, 5.4, 5.5_
 
-- [ ] 12. Phase 3 — CDK Identity Stack
-  - [~] 12.1 Implement CDK Identity Stack (`infra/stacks/identity_stack.py`)
+- [x] 12. Phase 3 — CDK Identity Stack
+  - [x] 12.1 Implement CDK Identity Stack (`infra/stacks/identity_stack.py`)
     - Create Cognito user pool with invite-only sign-up and email-based sign-in
     - Create Cognito app client for Telegram channel with user-password auth flow
     - Create Secrets Manager secrets under `openclaw/` namespace for external service credentials
@@ -212,18 +212,18 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Assert Secrets Manager secrets under `openclaw/` namespace
     - _Requirements: 8.1, 8.3, 8.6_
 
-- [ ] 13. Phase 3 — Tenant Isolation Construct & CDK App Entry Point
-  - [~] 13.1 Implement Tenant Isolation construct (`infra/constructs/tenant_isolation.py`)
+- [x] 13. Phase 3 — Tenant Isolation Construct & CDK App Entry Point
+  - [x] 13.1 Implement Tenant Isolation construct (`infra/constructs/tenant_isolation.py`)
     - Create per-tenant S3 key prefixes and IAM policies restricting each tenant to its own prefix
     - Ensure each tenant uses a separate AgentCore Memory store
     - Scope Secrets Manager access to `openclaw/{tenantId}/` namespace per tenant
     - _Requirements: 18.1, 18.2, 18.3_
 
-  - [~] 13.2 Implement OpenClawAgent reusable construct (`infra/constructs/openclaw_agent.py`)
+  - [x] 13.2 Implement OpenClawAgent reusable construct (`infra/constructs/openclaw_agent.py`)
     - Encapsulate one agent's ECS task, workspace bucket prefix, and memory store
     - _Requirements: 16.2_
 
-  - [~] 13.3 Create CDK app entry point (`infra/app.py`) and `infra/requirements.txt`
+  - [x] 13.3 Create CDK app entry point (`infra/app.py`) and `infra/requirements.txt`
     - Wire all stacks together, support `cdk deploy --all`
     - `aws-cdk-lib` as sole CDK dependency, Python 3.12+
     - _Requirements: 16.1, 16.4, 16.5_
@@ -238,11 +238,11 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Assert Secrets Manager scoped to `openclaw/{tenantId}/`
     - _Requirements: 18.1, 18.2, 18.3_
 
-- [ ] 14. Checkpoint — Verify Phase 3 CDK stacks
+- [x] 14. Checkpoint — Verify Phase 3 CDK stacks
   - Ensure all CDK assertion tests pass, `cdk synth` produces valid templates. Commit: `feat: phase 3 CDK stacks — storage, gateway, identity, tenant isolation`. Ask the user if questions arise.
 
-- [ ] 15. Phase 4 — Webhook Lambda Handler
-  - [~] 15.1 Implement Webhook Lambda Handler (`lambdas/webhook_handler.py`)
+- [x] 15. Phase 4 — Webhook Lambda Handler
+  - [x] 15.1 Implement Webhook Lambda Handler (`lambdas/webhook_handler.py`)
     - Extract platform from path: `/webhook/{platform}`
     - Verify platform-specific signature (HMAC-SHA256) per platform: Telegram (bot token), Slack (`X-Slack-Signature` with `v0:timestamp:body`), GitHub (`X-Hub-Signature-256`)
     - Check DynamoDB dedup table for webhook ID; if duplicate return 200
@@ -272,8 +272,8 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Test HTTP 401 on bad signature
     - _Requirements: 6.3, 6.4, 6.6, 8.5, 20.1, 20.2_
 
-- [ ] 16. Phase 4 — CDK API Stack
-  - [~] 16.1 Implement CDK API Stack (`infra/stacks/api_stack.py`)
+- [x] 16. Phase 4 — CDK API Stack
+  - [x] 16.1 Implement CDK API Stack (`infra/stacks/api_stack.py`)
     - Create HTTP API Gateway with route `POST /webhook/{proxy+}` forwarding to webhook Lambda
     - Create WebSocket API Gateway proxying to OpenClaw Gateway WebSocket server
     - Configure API Gateway throttling: 100 requests/second per route
@@ -287,8 +287,8 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Assert Lambda has SQS, DynamoDB, Secrets Manager permissions
     - _Requirements: 6.1, 6.2, 6.5_
 
-- [ ] 17. Phase 4 — Messaging Handlers
-  - [~] 17.1 Implement Telegram message handler (`adapters/telegram-handler.ts`)
+- [x] 17. Phase 4 — Messaging Handlers
+  - [x] 17.1 Implement Telegram message handler (`adapters/telegram-handler.ts`)
     - Parse webhook payload, check user authorization
     - Route message text to Supervisor Agent
     - Split responses >4096 chars into chunks, send sequentially with 100ms delay
@@ -299,7 +299,7 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - **Property 18: Telegram Message Chunking** — if response >4096 chars, split into chunks ≤4096 each, concatenation equals original
     - **Validates: Requirements 12.2**
 
-  - [~] 17.3 Implement Slack event handler (`adapters/slack-handler.ts`)
+  - [x] 17.3 Implement Slack event handler (`adapters/slack-handler.ts`)
     - Verify request signature, ignore bot messages to prevent loops
     - Parse event, route message to Supervisor Agent
     - _Requirements: 12.4_
@@ -308,7 +308,7 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - **Property 19: Slack Bot Message Filtering** — bot-sender events are not routed to Supervisor Agent
     - **Validates: Requirements 12.4**
 
-  - [~] 17.5 Implement WebSocket handler (`adapters/websocket-handler.ts`)
+  - [x] 17.5 Implement WebSocket handler (`adapters/websocket-handler.ts`)
     - Maintain connection state in DynamoDB with 1-hour TTL
     - Stream agent responses back to client as progressive chunks
     - Clean up DynamoDB entry on connection drop
@@ -324,8 +324,8 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Test WebSocket connection lifecycle (connect, message, disconnect)
     - _Requirements: 12.1, 12.2, 12.4, 12.5_
 
-- [ ] 18. Phase 4 — Workspace Assembly & Structured Logging
-  - [~] 18.1 Implement workspace file assembly for system prompt
+- [x] 18. Phase 4 — Workspace Assembly & Structured Logging
+  - [x] 18.1 Implement workspace file assembly for system prompt
     - Assemble workspace files in order: IDENTITY → SOUL → AGENTS → USER → MEMORY → TOOLS
     - Match OpenClaw core's ordering exactly
     - _Requirements: 17.1_
@@ -334,7 +334,7 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - **Property 21: Workspace Assembly Order** — files concatenated in IDENTITY → SOUL → AGENTS → USER → MEMORY → TOOLS order
     - **Validates: Requirements 16.1, 17.1**
 
-  - [~] 18.3 Implement structured JSON logging for Gateway container
+  - [x] 18.3 Implement structured JSON logging for Gateway container
     - Emit JSON logs to CloudWatch including `sessionId`, `agentId`, `channel`, `responseLatency`
     - _Requirements: 15.6_
 
@@ -342,7 +342,7 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - **Property 25: Structured Log Format** — every log entry contains `sessionId`, `agentId`, `channel`, `responseLatency`
     - **Validates: Requirements 15.6**
 
-- [ ] 19. Checkpoint — Verify Phase 4 API and messaging
+- [-] 19. Checkpoint — Verify Phase 4 API and messaging
   - Ensure all tests pass for webhook handler, API stack, messaging handlers, workspace assembly, and logging. Commit: `feat: phase 4 API gateway, webhooks, messaging handlers, structured logging`. Ask the user if questions arise.
 
 - [ ] 20. Phase 5 — EventBridge Scheduling

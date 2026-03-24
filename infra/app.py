@@ -29,9 +29,9 @@ for _p in _removed:
 from stacks.storage_stack import StorageStack  # noqa: E402
 from stacks.gateway_stack import GatewayStack  # noqa: E402
 from stacks.identity_stack import IdentityStack  # noqa: E402
+from stacks.api_stack import ApiStack  # noqa: E402
 
 # Future stacks (uncomment as implemented):
-# from stacks.api_stack import ApiStack
 # from stacks.memory_stack import MemoryStack
 # from stacks.scheduler_stack import SchedulerStack
 # from stacks.builder_stack import BuilderStack
@@ -54,11 +54,20 @@ gateway.add_dependency(storage)
 
 identity = IdentityStack(app, "OpenClawIdentity")
 
-# --- Future stacks (uncomment as implemented) ---
+# --- Phase 4 stacks ---
 
-# api = ApiStack(app, "OpenClawApi")
-# api.add_dependency(storage)
-# api.add_dependency(identity)
+api = ApiStack(
+    app,
+    "OpenClawApi",
+    dedup_table=storage.dedup_table,
+    telegram_bot_token_secret=identity.telegram_bot_token_secret,
+    slack_bot_token_secret=identity.slack_bot_token_secret,
+    github_token_secret=identity.github_token_secret,
+)
+api.add_dependency(storage)
+api.add_dependency(identity)
+
+# --- Future stacks (uncomment as implemented) ---
 
 # memory = MemoryStack(app, "OpenClawMemory")
 # memory.add_dependency(storage)
