@@ -342,11 +342,11 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - **Property 25: Structured Log Format** — every log entry contains `sessionId`, `agentId`, `channel`, `responseLatency`
     - **Validates: Requirements 15.6**
 
-- [-] 19. Checkpoint — Verify Phase 4 API and messaging
+- [x] 19. Checkpoint — Verify Phase 4 API and messaging
   - Ensure all tests pass for webhook handler, API stack, messaging handlers, workspace assembly, and logging. Commit: `feat: phase 4 API gateway, webhooks, messaging handlers, structured logging`. Ask the user if questions arise.
 
 - [ ] 20. Phase 5 — EventBridge Scheduling
-  - [~] 20.1 Implement Heartbeat Lambda (`lambdas/heartbeat_handler.py`)
+  - [x] 20.1 Implement Heartbeat Lambda (`lambdas/heartbeat_handler.py`)
     - Load HEARTBEAT.md from S3 workspace
     - Invoke Supervisor Agent with the checklist
     - If response is `HEARTBEAT_OK`: silently drop
@@ -366,7 +366,7 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Test Supervisor timeout handling
     - _Requirements: 7.2, 7.3, 7.4_
 
-  - [~] 20.4 Implement EventBridge schedule creation for agent-created schedules
+  - [x] 20.4 Implement EventBridge schedule creation for agent-created schedules
     - Create EventBridge Scheduler rules in `openclaw-agent-schedules` group
     - One-time schedules: set `ActionAfterCompletion: DELETE`
     - _Requirements: 7.6, 7.7_
@@ -375,7 +375,7 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - **Property 11: One-Time Schedule Auto-Deletion** — one-time schedules have `ActionAfterCompletion` set to `DELETE`
     - **Validates: Requirements 7.7**
 
-  - [~] 20.6 Implement CDK Scheduler Stack (`infra/stacks/scheduler_stack.py`)
+  - [x] 20.6 Implement CDK Scheduler Stack (`infra/stacks/scheduler_stack.py`)
     - Create EventBridge Scheduler rule: every 30 minutes → heartbeat Lambda
     - Create nightly schedule (cron: `0 2 * * ? *` UTC) → Memory Consolidation Lambda
     - _Requirements: 7.1, 7.5_
@@ -385,7 +385,7 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Assert nightly consolidation rule at 0 2 * * ? * UTC
     - _Requirements: 7.1, 7.5_
 
-- [ ] 21. Checkpoint — Verify Phase 5 scheduling
+- [-] 21. Checkpoint — Verify Phase 5 scheduling
   - Ensure all tests pass for heartbeat handler, scheduling, and scheduler stack. Commit: `feat: phase 5 EventBridge scheduling, heartbeat, and nightly consolidation`. Ask the user if questions arise.
 
 - [ ] 22. Phase 6 — Supervisor Agent
@@ -456,7 +456,7 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Assert Permission Boundary denies `iam:*`, `organizations:*`, `account:*`, `aws-portal:*`, `budgets:*`, `ce:*`, `cur:*`
     - _Requirements: 10.6_
 
-- [ ] 24. Checkpoint — Verify Phase 6 agents
+- [~] 24. Checkpoint — Verify Phase 6 agents
   - Ensure all tests pass for Supervisor Agent, Builder Sub-Agent, and Builder Stack. Commit: `feat: phase 6 supervisor agent, builder sub-agent, multi-agent orchestration`. Ask the user if questions arise.
 
 - [ ] 25. Phase 7 — Observability & Production Hardening
@@ -507,7 +507,7 @@ This plan follows the 8 build phases (Phase 0–7) from the design document. Eac
     - Verify `cdk synth` produces valid CloudFormation templates for all stacks
     - _Requirements: 16.1, 16.4_
 
-- [ ] 27. Final Checkpoint — Full test suite and final commit
+- [~] 27. Final Checkpoint — Full test suite and final commit
   - Ensure all unit tests, property tests, and CDK assertion tests pass. Run `cdk synth` to validate all templates. Commit: `feat: phase 7 observability, production hardening, full integration`. Ask the user if questions arise.
 
 ## Notes

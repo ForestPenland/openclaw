@@ -33,7 +33,7 @@ from stacks.api_stack import ApiStack  # noqa: E402
 
 # Future stacks (uncomment as implemented):
 # from stacks.memory_stack import MemoryStack
-# from stacks.scheduler_stack import SchedulerStack
+from stacks.scheduler_stack import SchedulerStack
 # from stacks.builder_stack import BuilderStack
 
 app = cdk.App()
@@ -72,8 +72,13 @@ api.add_dependency(identity)
 # memory = MemoryStack(app, "OpenClawMemory")
 # memory.add_dependency(storage)
 
-# scheduler = SchedulerStack(app, "OpenClawScheduler")
-# scheduler.add_dependency(storage)
+scheduler = SchedulerStack(
+    app,
+    "OpenClawScheduler",
+    workspace_bucket=storage.workspace_bucket,
+    memory_table=storage.memory_table,
+)
+scheduler.add_dependency(storage)
 
 # builder = BuilderStack(app, "OpenClawBuilder")
 # builder.add_dependency(storage)
