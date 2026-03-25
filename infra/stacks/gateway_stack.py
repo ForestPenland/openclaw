@@ -100,12 +100,28 @@ class GatewayStack(Stack):
             )
         )
 
-        # Bedrock: model invocation
+        # Bedrock: model invocation + model discovery
         task_role.add_to_principal_policy(
             iam.PolicyStatement(
                 actions=[
                     "bedrock:InvokeModel",
                     "bedrock:InvokeModelWithResponseStream",
+                    "bedrock:ListFoundationModels",
+                    "bedrock:GetFoundationModel",
+                ],
+                resources=["*"],
+            )
+        )
+
+        # AWS Marketplace: required for first invocation of marketplace
+        # models (e.g. Anthropic Claude). Amazon models (Nova) don't need
+        # this but it's harmless to include.
+        task_role.add_to_principal_policy(
+            iam.PolicyStatement(
+                actions=[
+                    "aws-marketplace:ViewSubscriptions",
+                    "aws-marketplace:Subscribe",
+                    "aws-marketplace:Unsubscribe",
                 ],
                 resources=["*"],
             )
