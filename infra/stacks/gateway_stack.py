@@ -166,6 +166,7 @@ class GatewayStack(Stack):
                 "TENANT_ID": "default-tenant",
                 "AGENT_ID": "default-agent",
                 "PROVIDER": "bedrock",
+                "OPENCLAW_ALLOW_INSECURE_PRIVATE_WS": "1",
             },
             essential=True,
             health_check=ecs.HealthCheck(

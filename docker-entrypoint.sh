@@ -22,6 +22,23 @@ else
 fi
 
 # ── Start gateway ────────────────────────────────────────────────
+# When binding to lan (0.0.0.0), OpenClaw requires explicit origin
+# config for the Control UI. Write a minimal config to allow it.
+OPENCLAW_CONFIG_DIR="${HOME}/.openclaw"
+mkdir -p "${OPENCLAW_CONFIG_DIR}"
+if [ ! -f "${OPENCLAW_CONFIG_DIR}/openclaw.json" ]; then
+  cat > "${OPENCLAW_CONFIG_DIR}/openclaw.json" <<'CONF'
+{
+  "gateway": {
+    "controlUi": {
+      "dangerouslyAllowHostHeaderOriginFallback": true
+    }
+  }
+}
+CONF
+  echo "[entrypoint] Created minimal gateway config"
+fi
+
 echo "[entrypoint] Starting OpenClaw gateway..."
 exec node /app/openclaw.mjs gateway \
   --bind "${OPENCLAW_GATEWAY_BIND:-lan}" \
