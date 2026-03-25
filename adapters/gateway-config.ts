@@ -146,7 +146,7 @@ export function buildConfig(secrets: {
 
   // Register Bedrock as the default model provider when PROVIDER=bedrock
   if (secrets.provider === "bedrock") {
-    const modelId = secrets.bedrockModelId ?? "amazon.nova-lite-v1:0";
+    const modelId = secrets.bedrockModelId ?? "us.anthropic.claude-sonnet-4-6";
     config.agents = {
       defaults: {
         model: `amazon-bedrock/${modelId}`,
