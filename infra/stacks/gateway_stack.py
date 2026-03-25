@@ -127,9 +127,30 @@ class GatewayStack(Stack):
         # --- Container Image (custom build) ---
         # CDK builds Dockerfile.gateway from the project root, pushes to
         # ECR, and references the image in the task definition.
+        #
+        # IMPORTANT: exclude infra/ (contains cdk.out which would cause
+        # recursive copy → ENAMETOOLONG), .git, node_modules, and other
+        # large directories that the .dockerignore already handles but
+        # CDK's asset staging does not read.
         gateway_image = ecs.ContainerImage.from_asset(
             _PROJECT_ROOT,
             file="Dockerfile.gateway",
+            exclude=[
+                "infra",
+                ".git",
+                ".kiro",
+                "node_modules",
+                ".pnpm-store",
+                "coverage",
+                "dist",
+                "apps/macos",
+                "apps/ios",
+                "apps/android",
+                "Swabble",
+                "test",
+                "test-fixtures",
+                "tests",
+            ],
         )
 
         # --- Container Definition ---
