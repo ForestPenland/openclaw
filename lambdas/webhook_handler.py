@@ -58,20 +58,29 @@ def _get_secret(secret_name: str) -> str:
 
 
 def verify_telegram_signature(body: str, headers: dict[str, str], secret: str) -> bool:
-    """Verify Telegram webhook using HMAC-SHA256 of body with SHA256(bot_token) as key.
+    """Verify Telegram webhook using the ``X-Telegram-Bot-Api-Secret-Token`` header.
 
-    Telegram doesn't send a signature header; the caller computes the expected
-    signature from the bot token. We verify by recomputing and comparing with
-    the ``X-Telegram-Bot-Api-Secret-Token`` header if present, or by validating
-    the payload structure. For HMAC-SHA256 verification, we use SHA256 of the
-    bot token as the HMAC key.
+    When a ``secret_token`` is set via ``setWebhook``, Telegram sends it in
+    the ``X-Telegram-Bot-Api-Secret-Token`` header on every request. We
+    compare it to a deterministic token derived from the bot token (SHA-256
+    hex digest, truncated to 64 chars to stay within Telegram's 256-char
+    limit).
+
+    If no secret_token was configured on the webhook (header is absent),
+    fall back to basic structural validation of the Telegram payload.
     """
-    secret_key = hashlib.sha256(secret.encode("utf-8")).digest()
-    expected = hmac.new(secret_key, body.encode("utf-8"), hashlib.sha256).hexdigest()
     provided = headers.get("x-telegram-bot-api-secret-token", "")
-    if not provided:
+    expected = hashlib.sha256(secret.encode("utf-8")).hexdigest()[:64]
+
+    if provided:
+        return hmac.compare_digest(expected, provided)
+
+    # Fallback: no secret_token header — validate payload looks like Telegram
+    try:
+        payload = json.loads(body)
+        return "update_id" in payload
+    except (json.JSONDecodeError, TypeError):
         return False
-    return hmac.compare_digest(expected, provided)
 
 
 def verify_slack_signature(body: str, headers: dict[str, str], secret: str) -> bool:
