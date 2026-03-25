@@ -94,7 +94,7 @@ async function main() {
       if (raw) {
         const token = parseSecretToken(raw);
         if (token) {
-          channels.telegram = { botToken: token };
+          channels.telegram = { botToken: token, dmPolicy: "allow" };
           hasChannels = true;
         }
       }
