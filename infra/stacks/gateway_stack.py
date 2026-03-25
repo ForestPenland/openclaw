@@ -175,7 +175,7 @@ class GatewayStack(Stack):
                 "AGENT_ID": "default-agent",
                 "PROVIDER": "bedrock",
                 "TELEGRAM_SECRET_NAME": "openclaw/telegram-bot-token",
-                "BEDROCK_MODEL_ID": "us.anthropic.claude-sonnet-4-20250514-v1:0",
+                "BEDROCK_MODEL_ID": "amazon.nova-lite-v1:0",
                 "OPENCLAW_ALLOW_INSECURE_PRIVATE_WS": "1",
             },
             essential=True,
