@@ -35,7 +35,7 @@ COPY ui/package.json ./ui/package.json
 COPY patches ./patches
 
 RUN --mount=type=cache,id=openclaw-pnpm-store,target=/root/.local/share/pnpm/store,sharing=locked \
-    NODE_OPTIONS=--max-old-space-size=2048 pnpm install --frozen-lockfile
+    NODE_OPTIONS=--max-old-space-size=2048 pnpm install --no-frozen-lockfile
 
 COPY . .
 
