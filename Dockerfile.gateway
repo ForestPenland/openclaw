@@ -92,10 +92,11 @@ COPY --from=runtime-assets --chown=node:node /app/extensions ./extensions
 COPY --from=runtime-assets --chown=node:node /app/skills ./skills
 COPY --from=runtime-assets --chown=node:node /app/docs ./docs
 
-# Copy our AWS adapters and workspace seeds
-COPY --chown=node:node adapters ./adapters
-COPY --chown=node:node agents ./agents
-COPY --chown=node:node workspace-seeds ./workspace-seeds
+# Copy our AWS extension files from the build stage (they were included
+# via COPY . . in stage 1 and survive pruning since they're not devDeps).
+COPY --from=runtime-assets --chown=node:node /app/adapters ./adapters
+COPY --from=runtime-assets --chown=node:node /app/agents ./agents
+COPY --from=runtime-assets --chown=node:node /app/workspace-seeds ./workspace-seeds
 
 ENV OPENCLAW_BUNDLED_PLUGINS_DIR=/app/extensions
 ENV COREPACK_HOME=/usr/local/share/corepack
@@ -114,7 +115,7 @@ RUN ln -sf /app/openclaw.mjs /usr/local/bin/openclaw && \
     chmod 755 /app/openclaw.mjs
 
 # Entrypoint script: sync workspace from S3, then start gateway
-COPY --chown=node:node infra/docker-entrypoint.sh /app/docker-entrypoint.sh
+COPY --chown=node:node docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod 755 /app/docker-entrypoint.sh
 
 ENV NODE_ENV=production
