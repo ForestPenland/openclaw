@@ -65,7 +65,13 @@ async function main() {
   const bedrockModelId = process.env.BEDROCK_MODEL_ID || "";
 
   // Base config — always present
+  // Include meta.lastTouchedVersion so OpenClaw treats this as an
+  // authoritative config and doesn't overwrite our model setting.
   const config = {
+    meta: {
+      lastTouchedVersion: "2026.3.23",
+      lastTouchedAt: new Date().toISOString(),
+    },
     gateway: {
       controlUi: {
         dangerouslyAllowHostHeaderOriginFallback: true,
