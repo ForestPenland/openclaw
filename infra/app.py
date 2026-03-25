@@ -34,6 +34,7 @@ from stacks.api_stack import ApiStack  # noqa: E402
 from stacks.memory_stack import MemoryStack
 from stacks.scheduler_stack import SchedulerStack
 from stacks.builder_stack import BuilderStack
+from stacks.agentcore_gateway_stack import AgentCoreGatewayStack
 
 app = cdk.App()
 
@@ -81,5 +82,9 @@ scheduler.add_dependency(storage)
 
 builder = BuilderStack(app, "OpenClawBuilder")
 builder.add_dependency(storage)
+
+# --- AgentCore Gateway tools ---
+
+agentcore_gw = AgentCoreGatewayStack(app, "OpenClawAgentCoreTools")
 
 app.synth()
