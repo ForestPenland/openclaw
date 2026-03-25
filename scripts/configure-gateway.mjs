@@ -75,7 +75,7 @@ async function main() {
 
   // Register Bedrock as the default model provider when PROVIDER=bedrock
   if (provider === "bedrock") {
-    const modelId = bedrockModelId || "us.anthropic.claude-sonnet-4-20250514-v1:0";
+    const modelId = bedrockModelId || "amazon.nova-lite-v1:0";
     config.agents = {
       defaults: {
         model: `amazon-bedrock/${modelId}`,
