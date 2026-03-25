@@ -21,12 +21,21 @@ else
   echo "[entrypoint] WORKSPACE_BUCKET not set — skipping S3 sync"
 fi
 
-# ── Start gateway ────────────────────────────────────────────────
-# When binding to lan (0.0.0.0), OpenClaw requires explicit origin
-# config for the Control UI. Write a minimal config to allow it.
-OPENCLAW_CONFIG_DIR="${HOME}/.openclaw"
+# ── Gateway Configuration Manager ────────────────────────────────
+# Read channel secrets from Secrets Manager and write openclaw.json
+# with Telegram/Slack credentials before the Gateway starts.
+# Falls back to minimal config if Secrets Manager is unreachable.
+export OPENCLAW_CONFIG_DIR="${HOME}/.openclaw"
 mkdir -p "${OPENCLAW_CONFIG_DIR}"
-if [ ! -f "${OPENCLAW_CONFIG_DIR}/openclaw.json" ]; then
+
+# Default secret name for Telegram bot token (not tenant-prefixed)
+export TELEGRAM_SECRET_NAME="${TELEGRAM_SECRET_NAME:-openclaw/telegram-bot-token}"
+
+echo "[entrypoint] Running Gateway Configuration Manager..."
+if node /app/scripts/configure-gateway.mjs; then
+  echo "[entrypoint] Gateway config generated successfully"
+else
+  echo "[entrypoint] Gateway config script failed — writing minimal fallback config"
   cat > "${OPENCLAW_CONFIG_DIR}/openclaw.json" <<'CONF'
 {
   "gateway": {
@@ -36,7 +45,6 @@ if [ ! -f "${OPENCLAW_CONFIG_DIR}/openclaw.json" ]; then
   }
 }
 CONF
-  echo "[entrypoint] Created minimal gateway config"
 fi
 
 echo "[entrypoint] Starting OpenClaw gateway..."

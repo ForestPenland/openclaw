@@ -96,6 +96,7 @@ COPY --from=runtime-assets --chown=node:node /app/docs ./docs
 # via COPY . . in stage 1 and survive pruning since they're not devDeps).
 COPY --from=runtime-assets --chown=node:node /app/adapters ./adapters
 COPY --from=runtime-assets --chown=node:node /app/agents ./agents
+COPY --from=runtime-assets --chown=node:node /app/scripts ./scripts
 COPY --from=runtime-assets --chown=node:node /app/workspace-seeds ./workspace-seeds
 
 ENV OPENCLAW_BUNDLED_PLUGINS_DIR=/app/extensions

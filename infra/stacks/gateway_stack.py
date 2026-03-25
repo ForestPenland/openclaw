@@ -124,6 +124,14 @@ class GatewayStack(Stack):
             )
         )
 
+        # Secrets Manager: read channel secrets (Telegram bot token, etc.)
+        task_role.add_to_principal_policy(
+            iam.PolicyStatement(
+                actions=["secretsmanager:GetSecretValue"],
+                resources=["arn:aws:secretsmanager:*:*:secret:openclaw/*"],
+            )
+        )
+
         # --- Container Image (custom build) ---
         # CDK builds Dockerfile.gateway from the project root, pushes to
         # ECR, and references the image in the task definition.
@@ -166,6 +174,8 @@ class GatewayStack(Stack):
                 "TENANT_ID": "default-tenant",
                 "AGENT_ID": "default-agent",
                 "PROVIDER": "bedrock",
+                "TELEGRAM_SECRET_NAME": "openclaw/telegram-bot-token",
+                "BEDROCK_MODEL_ID": "us.anthropic.claude-sonnet-4-20250514-v1:0",
                 "OPENCLAW_ALLOW_INSECURE_PRIVATE_WS": "1",
             },
             essential=True,
