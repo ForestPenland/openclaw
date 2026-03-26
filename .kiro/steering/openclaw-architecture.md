@@ -225,8 +225,9 @@ guild, or sender.
 1. The Gateway handles all channel integrations natively — no custom webhook pipelines
 2. Built-in tools (exec, read, write, edit) run directly on the host (Fargate container)
 3. Skills teach the agent capabilities via natural language SKILL.md files
-4. ACPX is needed for MCP tool access (MCP servers run inside the ACPX sandbox)
+4. ACPX is needed for MCP tool access (MCP servers run inside the ACPX sandbox). ACPX is a bundled extension that is disabled by default — it must be explicitly enabled with `enabled: true` in `plugins.entries.acpx`
 5. The agent's workspace files (SOUL.md, AGENTS.md, etc.) are the source of truth
 6. Memory is plain Markdown — daily logs + curated MEMORY.md
 7. Plugins extend capabilities (model providers, channels, tools)
 8. Config at `~/.openclaw/openclaw.json` — OpenClaw may overwrite it on startup
+9. Plugin config path is `plugins.entries.<id>.config`, not `plugins.<id>` — the `entries` intermediate key is required by OpenClaw's config schema

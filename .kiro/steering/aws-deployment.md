@@ -15,15 +15,17 @@ inclusion: manual
 
 ## Stack Architecture
 
-7 stacks, deployed in dependency order:
+9 stacks, deployed in dependency order:
 
-1. **OpenClawStorage** — S3 bucket + 5 DynamoDB tables. No dependencies
-2. **OpenClawIdentity** — Cognito + Secrets Manager. No dependencies
-3. **OpenClawGateway** — VPC, ECS Fargate, Docker image build. Depends on Storage
-4. **OpenClawApi** — HTTP/WebSocket API Gateway + Lambda. Depends on Storage, Identity. NOT in messaging path
-5. **OpenClawMemory** — SSM parameter for AgentCore Memory. Depends on Storage
-6. **OpenClawScheduler** — EventBridge rules + Lambdas. Depends on Storage
-7. **OpenClawBuilder** — IAM role with permission boundary. Depends on Storage
+1. **OpenClawStorage** — S3 buckets (workspace, skills, artifacts) + 5 DynamoDB tables (memory, sessions, agents, dedup, connections). No dependencies
+2. **OpenClawIdentity** — Cognito user pool + Secrets Manager secrets (Telegram, Slack, GitHub tokens). No dependencies
+3. **OpenClawGateway** — VPC, ECS Fargate cluster, Docker image build, task role with Bedrock/S3/DynamoDB/IAM/STS/Secrets Manager permissions. ACPX enabled with MCP bridge to AgentCore Gateway. Depends on Storage
+4. **OpenClawApi** — HTTP/WebSocket API Gateway + webhook Lambda + SQS. NOT in messaging path — for future webhook-based channels. Depends on Storage, Identity
+5. **OpenClawMemory** — SSM parameter for AgentCore Memory store ID + IAM policy. Placeholder — memory store not yet created at runtime. Depends on Storage
+6. **OpenClawScheduler** — EventBridge rules (heartbeat 30min, consolidation nightly) + Lambda handlers (stubs). Depends on Storage
+7. **OpenClawBuilder** — Builder agent IAM role with permission boundary. Not yet used. Depends on Storage
+8. **OpenClawAgentCoreTools** — Lambda for `deploy_static_site`. Registered as AgentCore Gateway target. MCP bridge connects to it via ACPX. No dependencies
+9. **OpenClawComputeEnvironments** — 4 DynamoDB tables (environments, agent-roles, tool-registry, cost-ledger) + cleanup Lambda + EventBridge schedules (30min environments, 6hr roles) + agent-permission-boundary managed policy + SNS topic. No dependencies
 
 ## Adding a New Stack
 
@@ -73,13 +75,24 @@ Set in `gateway_stack.py` on the container definition:
 | `BEDROCK_MODEL_ID` | `amazon.nova-lite-v1:0` | Bedrock model to use |
 | `TELEGRAM_SECRET_NAME` | `openclaw/telegram-bot-token` | Secrets Manager secret name |
 | `OPENCLAW_ALLOW_INSECURE_PRIVATE_WS` | `1` | Allow private workspace access |
+| `AGENTCORE_GATEWAY_SECRET_NAME` | `openclaw/agentcore-gateway-credentials` | Secrets Manager secret for AgentCore Gateway MCP bridge OAuth2 credentials |
 
 ## IAM Permissions on the Task Role
 
 The ECS task role (defined in `gateway_stack.py`) has:
+
+### Core permissions
 - S3 read/write on the workspace bucket
 - Bedrock `InvokeModel`, `InvokeModelWithResponseStream`, `ListFoundationModels`, `GetFoundationModel`
 - AWS Marketplace `ViewSubscriptions`, `Subscribe`, `Unsubscribe` (for third-party models)
 - DynamoDB read/write on memory, sessions, agents tables
 - Secrets Manager `GetSecretValue` on `openclaw/*`
 - AgentCore Runtime `bedrock-agent-runtime:*`
+
+### Role factory permissions (for task-scoped IAM roles)
+- `iam:CreateRole` on `arn:aws:iam::*:role/agent-task-*` — requires `iam:PermissionsBoundary` condition set to `agent-permission-boundary`
+- `iam:DeleteRole`, `iam:PutRolePolicy`, `iam:DeleteRolePolicy`, `iam:AttachRolePolicy`, `iam:DetachRolePolicy`, `iam:TagRole`, `iam:GetRole`, `iam:ListRolePolicies`, `iam:ListAttachedRolePolicies`, `iam:PassRole` on `arn:aws:iam::*:role/agent-task-*`
+- `sts:AssumeRole` on `arn:aws:iam::*:role/agent-task-*`
+
+### Compute environment permissions
+- DynamoDB CRUD on `openclaw-agent-roles`, `openclaw-environments`, `openclaw-cost-ledger`, `openclaw-tool-registry` tables

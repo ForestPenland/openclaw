@@ -87,13 +87,13 @@ cd openclaw/infra
 cdk deploy --all --profile openclaw-dev --require-approval broadening
 ```
 
-CDK builds the custom Docker image from `Dockerfile.gateway`, pushes it to ECR, and deploys all 7 stacks in dependency order. First deployment takes ~10–15 minutes (Docker build is the bottleneck). Subsequent deploys are faster due to layer caching.
+CDK builds the custom Docker image from `Dockerfile.gateway`, pushes it to ECR, and deploys all 9 stacks in dependency order. First deployment takes ~10–15 minutes (Docker build is the bottleneck). Subsequent deploys are faster due to layer caching.
 
 ### Step 4: Verify Deployment
 
 ```bash
 # All stacks should show CREATE_COMPLETE or UPDATE_COMPLETE
-for stack in OpenClawStorage OpenClawGateway OpenClawIdentity OpenClawApi OpenClawMemory OpenClawScheduler OpenClawBuilder; do
+for stack in OpenClawStorage OpenClawGateway OpenClawIdentity OpenClawApi OpenClawMemory OpenClawScheduler OpenClawBuilder OpenClawAgentCoreTools OpenClawComputeEnvironments; do
   echo -n "$stack: "
   aws cloudformation describe-stacks \
     --stack-name $stack \
@@ -111,15 +111,17 @@ All stacks are defined in `infra/stacks/` and wired together in `infra/app.py`.
 
 | Stack | What It Creates |
 |-------|----------------|
-| **OpenClawStorage** | S3 workspace bucket, DynamoDB tables (memory, sessions, agents, dedup, connections) |
-| **OpenClawGateway** | VPC (2 AZs, 1 NAT GW), ECS Fargate cluster, task definition (1024 CPU / 2048 MiB), Gateway service, CloudWatch log group. Builds custom Docker image from `Dockerfile.gateway` |
+| **OpenClawStorage** | S3 buckets (workspace, skills, artifacts), DynamoDB tables (memory, sessions, agents, dedup, connections) |
+| **OpenClawGateway** | VPC (2 AZs, 1 NAT GW), ECS Fargate cluster, task definition (1024 CPU / 2048 MiB), Gateway service, CloudWatch log group. Builds custom Docker image from `Dockerfile.gateway`. ACPX enabled with MCP bridge to AgentCore Gateway. Task role includes Bedrock, S3, DynamoDB, IAM (role factory), STS, Secrets Manager permissions |
 | **OpenClawIdentity** | Cognito user pool (invite-only), Secrets Manager secrets for Telegram/Slack/GitHub tokens |
-| **OpenClawApi** | HTTP API Gateway, WebSocket API Gateway, webhook Lambda, SQS queue. **Not in the messaging path** — exists for future GitHub webhooks and admin API |
-| **OpenClawMemory** | SSM parameter for AgentCore Memory store ID, IAM policy for memory access |
-| **OpenClawScheduler** | Heartbeat Lambda (30-min), memory consolidation Lambda (nightly 02:00 UTC), EventBridge rules, SNS alerts topic |
-| **OpenClawBuilder** | Builder agent IAM role with permission boundary (denies IAM/Organizations/Billing actions) |
+| **OpenClawApi** | HTTP API Gateway, WebSocket API Gateway, webhook Lambda, SQS queue. **Not in the messaging path** — exists for future webhook-based channels |
+| **OpenClawMemory** | SSM parameter for AgentCore Memory store ID, IAM policy for memory access. Placeholder — memory store not yet created at runtime |
+| **OpenClawScheduler** | Heartbeat Lambda (30-min), memory consolidation Lambda (nightly 02:00 UTC), EventBridge rules, SNS alerts topic. Lambda handlers are stubs |
+| **OpenClawBuilder** | Builder agent IAM role with permission boundary (denies IAM/Organizations/Billing actions). Not yet used |
+| **OpenClawAgentCoreTools** | Lambda for `deploy_static_site` tool. Registered as AgentCore Gateway target. MCP bridge connects to it via ACPX coding sessions |
+| **OpenClawComputeEnvironments** | 4 DynamoDB tables (environments, agent-roles, tool-registry, cost-ledger), cleanup Lambda, EventBridge schedules (30min environment cleanup, 6hr role cleanup), `agent-permission-boundary` managed policy, SNS lifecycle notifications topic |
 
-Dependency order: Storage → Gateway, Api, Memory, Scheduler, Builder. Identity has no dependencies.
+Dependency order: Storage → Gateway, Api, Memory, Scheduler, Builder. Identity → Api. AgentCoreTools and ComputeEnvironments have no dependencies.
 
 ---
 
@@ -259,6 +261,55 @@ For cross-region inference, prefix the model ID with `us.` (e.g., `us.anthropic.
 
 ---
 
+## ACPX / MCP Bridge Setup
+
+The Gateway uses ACPX (OpenClaw's coding agent sandbox) to access AgentCore Gateway MCP tools. This is configured automatically by `scripts/configure-gateway.mjs` at startup.
+
+### How It Works
+
+1. `configure-gateway.mjs` reads OAuth2 credentials from Secrets Manager (`openclaw/agentcore-gateway-credentials`)
+2. It writes the MCP bridge config to `plugins.entries.acpx.config.mcpServers` in `openclaw.json`
+3. The ACPX plugin is explicitly enabled (`enabled: true` — it's disabled by default)
+4. When the agent enters an ACPX coding session, the `aws-tools` MCP server spawns `scripts/mcp-gateway-bridge.mjs`
+5. The bridge handles OAuth2 token exchange and JSON-RPC proxying to the AgentCore Gateway
+
+### Available MCP Tools
+
+- `deploy_static_site` — deploy a static website to S3 + CloudFront (backed by `openclaw-deploy-static-site` Lambda)
+
+Additional tools can be registered by creating new Lambda functions and adding them as AgentCore Gateway targets.
+
+### Config Path
+
+Plugin config must use `plugins.entries.<id>.config`, not `plugins.<id>`. The `entries` intermediate key is required by OpenClaw's config schema. See the troubleshooting guide for common ACPX config issues.
+
+---
+
+## Role Factory (Task-Scoped IAM Roles)
+
+The agent can create temporary IAM roles for elevated permissions when the base ECS task role is insufficient. All agent-created roles are constrained by the `agent-permission-boundary` managed policy.
+
+### How It Works
+
+1. The agent creates a role with the `agent-task-` prefix and the mandatory permission boundary
+2. The agent attaches an inline policy with the specific permissions needed
+3. The agent assumes the role via STS to get temporary credentials
+4. A cleanup Lambda automatically deletes roles older than 24 hours (runs every 6 hours)
+
+### Constraints
+
+- All roles must be prefixed with `agent-task-`
+- All roles must have `agent-permission-boundary` attached (enforced by IAM condition on `CreateRole`)
+- Maximum 5 concurrent active roles
+- Roles expire after 24 hours
+- Permission boundary denies: IAM (except scoped role creation), Organizations, Account, Billing
+
+### DynamoDB Tracking
+
+Agent-created roles are tracked in the `openclaw-agent-roles` DynamoDB table. The cleanup Lambda scans this table to find expired roles.
+
+---
+
 ## Post-Deployment Verification
 
 ### Check ECS Gateway Health
@@ -293,7 +344,27 @@ Look for:
 - `[entrypoint] Workspace sync complete` — S3 sync succeeded
 - `Gateway config generated successfully` — Secrets Manager read succeeded
 - `Starting OpenClaw gateway...` — Gateway process starting
+- `AgentCore Gateway MCP bridge configured (ACPX)` — MCP bridge wired
 - Telegram/Slack connection messages if channels are configured
+
+### Check Compute Environment Resources
+
+```bash
+# Verify DynamoDB tables exist
+for table in openclaw-environments openclaw-agent-roles openclaw-tool-registry openclaw-cost-ledger; do
+  echo -n "$table: "
+  aws dynamodb describe-table --table-name $table --profile openclaw-dev \
+    --query 'Table.TableStatus' --output text 2>/dev/null || echo "NOT_FOUND"
+done
+
+# Verify cleanup Lambda
+aws lambda get-function --function-name openclaw-environment-cleanup \
+  --profile openclaw-dev --query 'Configuration.{State:State,Runtime:Runtime}' 2>/dev/null
+
+# Verify permission boundary
+aws iam get-policy --policy-arn arn:aws:iam::$(aws sts get-caller-identity --profile openclaw-dev --query Account --output text):policy/agent-permission-boundary \
+  --profile openclaw-dev --query 'Policy.PolicyName' --output text 2>/dev/null
+```
 
 ### CloudWatch Dashboard
 
@@ -327,8 +398,9 @@ Set on the ECS task definition in `gateway_stack.py`:
 | `TENANT_ID` | `default-tenant` | Tenant identifier for S3 prefix |
 | `AGENT_ID` | `default-agent` | Agent identifier for S3 prefix |
 | `PROVIDER` | `bedrock` | Model provider (`bedrock` or `anthropic` for local) |
-| `BEDROCK_MODEL_ID` | `amazon.nova-lite-v1:0` | Bedrock model ID |
+| `BEDROCK_MODEL_ID` | `us.anthropic.claude-sonnet-4-6` | Bedrock model ID |
 | `TELEGRAM_SECRET_NAME` | `openclaw/telegram-bot-token` | Secrets Manager secret name for Telegram |
+| `AGENTCORE_GATEWAY_SECRET_NAME` | `openclaw/agentcore-gateway-credentials` | Secrets Manager secret for AgentCore Gateway MCP bridge OAuth2 credentials |
 | `OPENCLAW_ALLOW_INSECURE_PRIVATE_WS` | `1` | Allow private workspace access |
 
 Set by `docker-entrypoint.sh`:
@@ -349,9 +421,9 @@ Monthly estimates for a single-agent deployment in `us-east-1` (~100 conversatio
 |----------|---------------|
 | ECS Fargate (1024 CPU, 2048 MiB, 24/7) | ~$35/month |
 | NAT Gateway | ~$32/month |
-| DynamoDB (on-demand, 5 tables) | ~$2–5/month |
+| DynamoDB (on-demand, 9 tables) | ~$3–8/month |
 | S3 (workspace + artifacts) | <$1/month |
-| Lambda (heartbeat + consolidation) | <$1/month |
+| Lambda (heartbeat + consolidation + cleanup) | <$1/month |
 | CloudWatch (logs, dashboard, alarms) | ~$3–5/month |
 | Secrets Manager (3 secrets) | ~$1.20/month |
 | Other (SNS, EventBridge, Cognito free tier) | <$2/month |

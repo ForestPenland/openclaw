@@ -98,6 +98,36 @@ And start with `--bind lan`.
 **Cause:** Exceeding the default provisioned throughput for the model.
 **Fix:** The Bedrock adapter has built-in retry with exponential backoff (3 retries). For sustained high throughput, request a quota increase in the AWS console or use provisioned throughput.
 
+## ACPX / MCP Issues
+
+### ACPX Plugin Config Path
+**Symptom:** Gateway fails with "Unrecognized key: acpx" under `plugins`.
+**Cause:** Plugin config must go through `plugins.entries.<id>.config`, not `plugins.<id>`. OpenClaw's config schema expects the `entries` intermediate key for plugin configuration.
+**Fix:** Write to `plugins.entries.acpx.config.mcpServers` in `scripts/configure-gateway.mjs`:
+```javascript
+config.plugins = config.plugins || {};
+config.plugins.entries = config.plugins.entries || {};
+config.plugins.entries.acpx = {
+  enabled: true,
+  config: {
+    mcpServers: {
+      "aws-tools": mcpBridgeConfig,
+    },
+  },
+};
+```
+
+### ACPX Plugin Disabled by Default
+**Symptom:** Logs show "plugin disabled (bundled (disabled by default)) but config is present" — ACPX config is written correctly but the plugin never activates.
+**Cause:** ACPX is a bundled extension that is disabled by default. Providing config alone is not enough.
+**Fix:** Set `enabled: true` in `plugins.entries.acpx`:
+```javascript
+config.plugins.entries.acpx = {
+  enabled: true,  // Required — ACPX is disabled by default
+  config: { ... },
+};
+```
+
 ## Debugging Commands
 
 ```bash
