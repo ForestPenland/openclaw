@@ -345,29 +345,6 @@ class GatewayStack(Stack):
             )
         )
 
-        # IAM PassRole: allow passing agent-task-* roles to AWS services
-        task_role.add_to_principal_policy(
-            iam.PolicyStatement(
-                sid="AllowPassRoleToServices",
-                actions=["iam:PassRole"],
-                resources=[
-                    f"arn:aws:iam::{Stack.of(self).account}:role/agent-task-*"
-                ],
-                conditions={
-                    "StringLike": {
-                        "iam:PassedToService": [
-                            "codebuild.amazonaws.com",
-                            "ecs-tasks.amazonaws.com",
-                            "lambda.amazonaws.com",
-                            "bedrock.amazonaws.com",
-                            "events.amazonaws.com",
-                            "states.amazonaws.com",
-                        ]
-                    }
-                },
-            )
-        )
-
         # AgentCore: control plane operations (create/manage runtimes)
         task_role.add_to_principal_policy(
             iam.PolicyStatement(
