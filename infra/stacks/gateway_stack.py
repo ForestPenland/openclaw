@@ -148,6 +148,81 @@ class GatewayStack(Stack):
             )
         )
 
+        # IAM: create task-scoped roles with mandatory permission boundary.
+        # CreateRole requires the boundary condition so the agent can never
+        # create an unbounded role.
+        task_role.add_to_principal_policy(
+            iam.PolicyStatement(
+                sid="AllowAgentTaskRoleCreate",
+                actions=[
+                    "iam:CreateRole",
+                ],
+                resources=[
+                    f"arn:aws:iam::{Stack.of(self).account}:role/agent-task-*"
+                ],
+                conditions={
+                    "StringEquals": {
+                        "iam:PermissionsBoundary": f"arn:aws:iam::{Stack.of(self).account}:policy/agent-permission-boundary"
+                    }
+                },
+            )
+        )
+
+        # IAM: manage existing agent-task-* roles (no boundary condition
+        # needed — these actions operate on already-created roles).
+        task_role.add_to_principal_policy(
+            iam.PolicyStatement(
+                sid="AllowAgentTaskRoleManage",
+                actions=[
+                    "iam:DeleteRole",
+                    "iam:PutRolePolicy",
+                    "iam:DeleteRolePolicy",
+                    "iam:AttachRolePolicy",
+                    "iam:DetachRolePolicy",
+                    "iam:TagRole",
+                    "iam:GetRole",
+                    "iam:ListRolePolicies",
+                    "iam:ListAttachedRolePolicies",
+                    "iam:PassRole",
+                ],
+                resources=[
+                    f"arn:aws:iam::{Stack.of(self).account}:role/agent-task-*"
+                ],
+            )
+        )
+
+        # STS: assume agent-task-* roles for elevated permissions
+        task_role.add_to_principal_policy(
+            iam.PolicyStatement(
+                sid="AllowAssumeAgentTaskRoles",
+                actions=["sts:AssumeRole"],
+                resources=[
+                    f"arn:aws:iam::{Stack.of(self).account}:role/agent-task-*"
+                ],
+            )
+        )
+
+        # DynamoDB: access to role tracking and environment tables
+        task_role.add_to_principal_policy(
+            iam.PolicyStatement(
+                sid="AllowComputeEnvTables",
+                actions=[
+                    "dynamodb:PutItem",
+                    "dynamodb:GetItem",
+                    "dynamodb:UpdateItem",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:Scan",
+                    "dynamodb:Query",
+                ],
+                resources=[
+                    f"arn:aws:dynamodb:*:*:table/openclaw-agent-roles",
+                    f"arn:aws:dynamodb:*:*:table/openclaw-environments",
+                    f"arn:aws:dynamodb:*:*:table/openclaw-cost-ledger",
+                    f"arn:aws:dynamodb:*:*:table/openclaw-tool-registry",
+                ],
+            )
+        )
+
         # --- Container Image (custom build) ---
         # CDK builds Dockerfile.gateway from the project root, pushes to
         # ECR, and references the image in the task definition.
