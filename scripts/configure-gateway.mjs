@@ -100,7 +100,7 @@ async function main() {
       if (raw) {
         const token = parseSecretToken(raw);
         if (token) {
-          channels.telegram = { botToken: token, dmPolicy: "open", allowFrom: ["8673173617"] };
+          channels.telegram = { botToken: token, dmPolicy: "allowlist", allowFrom: ["8673173617"] };
           hasChannels = true;
         }
       }
@@ -143,17 +143,18 @@ async function main() {
       try {
         const gwCreds = JSON.parse(gatewaySecretRaw);
         if (gwCreds.mcp_url && gwCreds.client_id && gwCreds.client_secret && gwCreds.token_url) {
-          config.mcpServers = {
-            "aws-tools": {
-              command: "node",
-              args: ["/app/scripts/mcp-gateway-bridge.mjs"],
-              type: "stdio",
-              env: {
-                GATEWAY_MCP_URL: gwCreds.mcp_url,
-                GATEWAY_CLIENT_ID: gwCreds.client_id,
-                GATEWAY_CLIENT_SECRET: gwCreds.client_secret,
-                GATEWAY_TOKEN_URL: gwCreds.token_url,
-                GATEWAY_SCOPE: gwCreds.scope || "",
+          config.mcp = {
+            servers: {
+              "aws-tools": {
+                command: "node",
+                args: ["/app/scripts/mcp-gateway-bridge.mjs"],
+                env: {
+                  GATEWAY_MCP_URL: gwCreds.mcp_url,
+                  GATEWAY_CLIENT_ID: gwCreds.client_id,
+                  GATEWAY_CLIENT_SECRET: gwCreds.client_secret,
+                  GATEWAY_TOKEN_URL: gwCreds.token_url,
+                  GATEWAY_SCOPE: gwCreds.scope || "",
+                },
               },
             },
           };
