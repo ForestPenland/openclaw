@@ -137,14 +137,16 @@ async function main() {
 
     // MCP servers — AgentCore Gateway bridge
     // Read Gateway credentials from Secrets Manager
-    const gatewaySecretName = process.env.AGENTCORE_GATEWAY_SECRET_NAME || "openclaw/agentcore-gateway-credentials";
+    const gatewaySecretName =
+      process.env.AGENTCORE_GATEWAY_SECRET_NAME || "openclaw/agentcore-gateway-credentials";
     const gatewaySecretRaw = await getSecretValue(client, gatewaySecretName);
     if (gatewaySecretRaw) {
       try {
         const gwCreds = JSON.parse(gatewaySecretRaw);
         if (gwCreds.mcp_url && gwCreds.client_id && gwCreds.client_secret && gwCreds.token_url) {
-          // MCP servers go in the acpx plugin config (coding agent sandbox)
-          // AND in mcp.servers (for the CLI and future direct support)
+          // MCP servers go in plugins.acpx.mcpServers only — MCP tools
+          // are available inside ACPX coding sessions, not the main session.
+          // The mcp.servers key is CLI-only and not used for Gateway tools.
           const mcpBridgeConfig = {
             command: "node",
             args: ["/app/scripts/mcp-gateway-bridge.mjs"],
@@ -157,21 +159,14 @@ async function main() {
             },
           };
 
-          // Configure for the coding agent (acpx/Pi sandbox)
+          // Configure for the coding agent (ACPX sandbox)
           config.plugins = config.plugins || {};
           config.plugins.acpx = config.plugins.acpx || {};
           config.plugins.acpx.mcpServers = {
             "aws-tools": mcpBridgeConfig,
           };
 
-          // Also configure in mcp.servers for CLI access
-          config.mcp = {
-            servers: {
-              "aws-tools": mcpBridgeConfig,
-            },
-          };
-
-          log("info", "AgentCore Gateway MCP bridge configured", { url: gwCreds.mcp_url });
+          log("info", "AgentCore Gateway MCP bridge configured (ACPX)", { url: gwCreds.mcp_url });
         }
       } catch (e) {
         log("warn", "Failed to parse AgentCore Gateway credentials", { error: String(e) });
