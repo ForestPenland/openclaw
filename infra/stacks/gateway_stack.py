@@ -223,6 +223,95 @@ class GatewayStack(Stack):
             )
         )
 
+        # CodeBuild: create and manage build projects for delegated builds
+        task_role.add_to_principal_policy(
+            iam.PolicyStatement(
+                sid="AllowCodeBuild",
+                actions=[
+                    "codebuild:CreateProject",
+                    "codebuild:DeleteProject",
+                    "codebuild:UpdateProject",
+                    "codebuild:StartBuild",
+                    "codebuild:StopBuild",
+                    "codebuild:BatchGetBuilds",
+                    "codebuild:BatchGetProjects",
+                    "codebuild:ListBuildsForProject",
+                ],
+                resources=["*"],
+            )
+        )
+
+        # ECR: manage container images for agent-built services
+        task_role.add_to_principal_policy(
+            iam.PolicyStatement(
+                sid="AllowECR",
+                actions=[
+                    "ecr:CreateRepository",
+                    "ecr:DeleteRepository",
+                    "ecr:DescribeRepositories",
+                    "ecr:GetAuthorizationToken",
+                    "ecr:BatchGetImage",
+                    "ecr:PutImage",
+                    "ecr:InitiateLayerUpload",
+                    "ecr:UploadLayerPart",
+                    "ecr:CompleteLayerUpload",
+                    "ecr:BatchCheckLayerAvailability",
+                ],
+                resources=["*"],
+            )
+        )
+
+        # IAM PassRole: allow passing agent-task-* roles to AWS services
+        task_role.add_to_principal_policy(
+            iam.PolicyStatement(
+                sid="AllowPassRoleToServices",
+                actions=["iam:PassRole"],
+                resources=[
+                    f"arn:aws:iam::{Stack.of(self).account}:role/agent-task-*"
+                ],
+                conditions={
+                    "StringLike": {
+                        "iam:PassedToService": [
+                            "codebuild.amazonaws.com",
+                            "ecs-tasks.amazonaws.com",
+                            "lambda.amazonaws.com",
+                            "bedrock.amazonaws.com",
+                            "events.amazonaws.com",
+                            "states.amazonaws.com",
+                        ]
+                    }
+                },
+            )
+        )
+
+        # AgentCore: control plane operations (create/manage runtimes)
+        task_role.add_to_principal_policy(
+            iam.PolicyStatement(
+                sid="AllowAgentCoreControl",
+                actions=[
+                    "bedrock-agentcore:*",
+                ],
+                resources=["*"],
+            )
+        )
+
+        # CloudWatch Logs: read build logs and create log groups
+        task_role.add_to_principal_policy(
+            iam.PolicyStatement(
+                sid="AllowCloudWatchLogs",
+                actions=[
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents",
+                    "logs:GetLogEvents",
+                    "logs:FilterLogEvents",
+                    "logs:DescribeLogGroups",
+                    "logs:DescribeLogStreams",
+                ],
+                resources=["*"],
+            )
+        )
+
         # --- Container Image (custom build) ---
         # CDK builds Dockerfile.gateway from the project root, pushes to
         # ECR, and references the image in the task definition.
