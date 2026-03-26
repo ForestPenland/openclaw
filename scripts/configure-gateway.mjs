@@ -17,7 +17,7 @@
  *   1 — unexpected fatal error
  */
 
-import { writeFileSync, mkdirSync, existsSync } from "node:fs";
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { SecretsManagerClient, GetSecretValueCommand } from "@aws-sdk/client-secrets-manager";
@@ -51,6 +51,26 @@ function parseSecretToken(raw) {
     }
   }
   return trimmed;
+}
+
+/**
+ * Deep-merge source into target (mutates target).
+ * Arrays are replaced (not concatenated). Primitives overwrite.
+ * Keys named "_comment" are skipped (allows inline documentation in overlays).
+ */
+function deepMerge(target, source) {
+  for (const [key, val] of Object.entries(source)) {
+    if (key === "_comment") continue;
+    if (
+      val && typeof val === "object" && !Array.isArray(val) &&
+      target[key] && typeof target[key] === "object" && !Array.isArray(target[key])
+    ) {
+      deepMerge(target[key], val);
+    } else {
+      target[key] = val;
+    }
+  }
+  return target;
 }
 
 async function main() {
@@ -104,15 +124,6 @@ async function main() {
             botToken: token,
             dmPolicy: "allowlist",
             allowFrom: ["8673173617"],
-            // Group config: respond to all messages (no @mention needed)
-            // but only from the operator. Other users are ignored.
-            groupPolicy: "allowlist",
-            groupAllowFrom: ["8673173617"],
-            groups: {
-              "-1003825623171": {
-                requireMention: false,
-              },
-            },
           };
           hasChannels = true;
         }
@@ -200,6 +211,23 @@ async function main() {
       error: String(err),
     });
     // Graceful fallback: minimal config without channel credentials
+  }
+
+  // ── Config Overlay from S3 Workspace ─────────────────────────
+  // Merge config-overlay.json from the workspace directory (already
+  // synced from S3 by docker-entrypoint.sh before this script runs).
+  // This lets runtime config changes survive container restarts without
+  // rebuilding the image — just edit the overlay and sync to S3.
+  const workspaceDir = process.env.OPENCLAW_WORKSPACE_DIR || join(homedir(), ".openclaw", "workspace");
+  const overlayPath = join(workspaceDir, "config-overlay.json");
+  if (existsSync(overlayPath)) {
+    try {
+      const overlay = JSON.parse(readFileSync(overlayPath, "utf-8"));
+      deepMerge(config, overlay);
+      log("info", "Applied config overlay from workspace", { path: overlayPath });
+    } catch (e) {
+      log("warn", "Failed to parse config-overlay.json — skipping overlay", { error: String(e) });
+    }
   }
 
   // Write config

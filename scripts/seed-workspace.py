@@ -26,6 +26,7 @@ SEED_FILES = [
     "TOOLS.md",
     "USER.md",
     "IDENTITY.md",
+    "config-overlay.json",
 ]
 
 SKILLS_DIR = os.path.join(WORKSPACE_SEEDS_DIR, "skills")

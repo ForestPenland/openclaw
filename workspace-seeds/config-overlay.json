@@ -1,0 +1,14 @@
+{
+  "_comment": "Runtime config overlay — deep-merged into openclaw.json at startup. Edit this file and sync to S3 to change config without rebuilding the container image.",
+  "channels": {
+    "telegram": {
+      "groupPolicy": "allowlist",
+      "groupAllowFrom": ["8673173617"],
+      "groups": {
+        "-1003825623171": {
+          "requireMention": false
+        }
+      }
+    }
+  }
+}
