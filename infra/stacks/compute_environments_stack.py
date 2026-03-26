@@ -177,17 +177,18 @@ class ComputeEnvironmentsStack(Stack):
                     ],
                     resources=["*"],
                 ),
-                # ── Account/billing/org lockout ──────────────────
+                # ── Account/billing lockout ──────────────────
+                # Allow cost visibility (CE, CUR, Budgets) but deny
+                # billing payment and account modification.
                 iam.PolicyStatement(
                     sid="DenyAccountAndBilling",
                     effect=iam.Effect.DENY,
                     actions=[
                         "organizations:*",
                         "account:*",
-                        "aws-portal:*",
-                        "budgets:*",
-                        "ce:*",
-                        "cur:*",
+                        "aws-portal:ModifyBilling",
+                        "aws-portal:ModifyPaymentMethods",
+                        "aws-portal:ModifyAccount",
                     ],
                     resources=["*"],
                 ),
