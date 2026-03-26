@@ -115,16 +115,20 @@ This builds on the existing OpenClaw AWS Extension (OpenClaw Gateway on Fargate,
 
 ### Requirement 7: Security and Isolation
 
-**User Story:** As an operator, I want all execution environments to be isolated and secured, so that the agent cannot escalate privileges or access resources outside its scope.
+**User Story:** As an operator, I want all execution environments to be isolated and secured, with the agent able to create task-scoped IAM roles for elevated permissions while staying within a hard security boundary.
 
 #### Acceptance Criteria
 
-1. ALL execution environments SHALL use IAM roles with permission boundaries that deny IAM, Organizations, Account, and Billing actions
-2. ALL agent-provisioned resources SHALL use the `agent-` name prefix for identification and scoped IAM policies
-3. THE system SHALL enforce a maximum concurrent environment limit (default: 3) to prevent runaway provisioning
-4. THE system SHALL enforce a maximum monthly cost budget for agent-provisioned compute (configurable, default: $100)
-5. THE system SHALL log all environment provisioning and teardown events to CloudWatch with the operator's Telegram user ID
-6. WHEN the agent attempts to provision an environment that would exceed the budget or concurrency limit, THE system SHALL deny the request and notify the operator
+1. THE ECS task role SHALL have a base set of permissions for read-only operations (S3 list, describe stacks, etc.) and the ability to create task-scoped IAM roles
+2. THE agent SHALL be able to create IAM roles prefixed with `agent-task-` for elevated permissions needed by specific tasks
+3. ALL agent-created roles SHALL have the `agent-permission-boundary` managed policy attached as a permission boundary, enforced via IAM condition keys
+4. THE permission boundary SHALL deny: `iam:*` (except scoped role creation), `organizations:*`, `account:*`, `aws-portal:*`, `budgets:*`, `ce:*`, `cur:*`
+5. THE agent SHALL assume task-scoped roles via STS `AssumeRole` with a session duration appropriate to the task (default: 1 hour, max: 4 hours)
+6. THE agent SHALL NOT be able to modify the permission boundary, remove it from created roles, or modify its own ECS task role
+7. ALL agent-created roles SHALL be logged to CloudTrail and tracked in a DynamoDB table with creation time, purpose, and expiry
+8. A cleanup Lambda SHALL run every 6 hours to delete agent-created roles older than 24 hours
+9. THE system SHALL enforce a maximum of 5 concurrent agent-created roles to prevent runaway role creation
+10. THE system SHALL enforce a maximum monthly cost budget for agent-provisioned resources (configurable, default: $100)
 
 ### Requirement 8: Environment Lifecycle Management
 
