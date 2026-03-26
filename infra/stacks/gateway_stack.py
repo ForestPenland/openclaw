@@ -238,7 +238,6 @@ class GatewayStack(Stack):
                     "iam:GetRole",
                     "iam:ListRolePolicies",
                     "iam:ListAttachedRolePolicies",
-                    "iam:PassRole",
                     "iam:UpdateAssumeRolePolicy",
                     "iam:PutRolePermissionsBoundary",
                     "iam:CreatePolicy",
@@ -250,11 +249,35 @@ class GatewayStack(Stack):
             )
         )
 
-        # STS: assume agent-task-* roles + identity
+        # PassRole: allow passing ANY role in the account to AWS services.
+        # The agent needs to hand execution roles to CodeBuild, Lambda,
+        # ECS, Bedrock, etc. — these roles aren't always agent-task-*.
+        task_role.add_to_principal_policy(
+            iam.PolicyStatement(
+                sid="AllowPassRoleToServices",
+                actions=["iam:PassRole"],
+                resources=[f"arn:aws:iam::{_ACCOUNT}:role/*"],
+                conditions={
+                    "StringLike": {
+                        "iam:PassedToService": [
+                            "codebuild.amazonaws.com",
+                            "ecs-tasks.amazonaws.com",
+                            "lambda.amazonaws.com",
+                            "bedrock.amazonaws.com",
+                            "bedrock-agentcore.amazonaws.com",
+                            "events.amazonaws.com",
+                            "states.amazonaws.com",
+                        ]
+                    }
+                },
+            )
+        )
+
+        # STS: assume agent-task-* roles for elevated permissions
         task_role.add_to_principal_policy(
             iam.PolicyStatement(
                 sid="AllowAssumeAgentTaskRoles",
-                actions=["sts:AssumeRole", "sts:GetCallerIdentity"],
+                actions=["sts:AssumeRole"],
                 resources=[f"arn:aws:iam::{_ACCOUNT}:role/agent-task-*"],
             )
         )
