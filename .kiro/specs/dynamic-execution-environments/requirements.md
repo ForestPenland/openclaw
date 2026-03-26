@@ -2,11 +2,11 @@
 
 ## Introduction
 
-This document defines the requirements for a dynamic execution environment system that enables the OpenClaw agent to intelligently select and provision the right AWS compute environment for each task. Rather than being limited to a single execution backend, the agent can choose from a spectrum of compute options — from lightweight AgentCore Runtime microVMs for quick interactive tasks, to CodeBuild for CI/CD pipelines, to EC2 instances for long-running or specialized workloads, to ECS Fargate for containerized services.
+This document defines the requirements for a dynamic execution environment system that enables the OpenClaw agent to intelligently select and provision the right AWS compute environment for each task. The system uses OpenClaw's default ACPX coding sandbox as the agent's local workspace, with delegation to remote AWS compute services for heavy execution.
 
-The system implements a "compute router" pattern: the agent analyzes the task requirements (duration, resources, tools needed, persistence, cost sensitivity) and selects the optimal execution environment. Each environment is provisioned on demand, used for the task, and cleaned up when done.
+The approach is "local workspace + remote hands": ACPX provides the agent with a local coding environment (file editing, shell commands, code testing, MCP tools) where it drafts, validates, and prepares work. Heavy execution — CDK deployments, Docker builds, GPU workloads, persistent services — is delegated to remote AWS environments via shell commands (AWS CLI) and MCP tools (AgentCore Gateway).
 
-This builds on the existing OpenClaw AWS Extension (OpenClaw Gateway on Fargate, Bedrock provider, AgentCore Gateway with Lambda tools) and extends it with a pluggable execution backend that bridges OpenClaw's ACP (Agent Client Protocol) to multiple AWS compute services.
+This builds on the existing OpenClaw AWS Extension (OpenClaw Gateway on Fargate, Bedrock provider, AgentCore Gateway with Lambda tools) and extends it with ACPX enablement, delegation skills, and lifecycle management for remote execution environments.
 
 ## Glossary
 
@@ -20,17 +20,18 @@ This builds on the existing OpenClaw AWS Extension (OpenClaw Gateway on Fargate,
 
 ## Requirements
 
-### Requirement 1: Pluggable Execution Backend
+### Requirement 1: ACPX Local Workspace
 
-**User Story:** As an operator, I want the agent to execute tasks on the most appropriate AWS compute service, so that quick tasks use lightweight microVMs and complex tasks use purpose-built environments.
+**User Story:** As an operator, I want the agent to have a local coding workspace via ACPX where it can draft code, test ideas, and prepare work before delegating heavy execution to remote environments.
 
 #### Acceptance Criteria
 
-1. THE system SHALL implement OpenClaw's `AcpRuntime` interface as a custom plugin that routes execution to AWS compute services
-2. THE system SHALL support at least four execution backends: AgentCore Runtime, AWS CodeBuild, EC2, and ECS Fargate
-3. WHEN the agent needs to execute a task, THE compute router SHALL analyze the task and select the optimal backend based on task characteristics
-4. THE system SHALL allow the agent to explicitly request a specific backend when it has enough context to make the decision
-5. THE system SHALL fall back to AgentCore Runtime as the default backend when no specific requirements are identified
+1. THE Docker image (Dockerfile.gateway) SHALL include the `acpx` binary and its dependencies
+2. THE ACPX plugin SHALL be enabled in the openclaw.json configuration
+3. THE ACPX environment SHALL have access to MCP tools via the AgentCore Gateway bridge
+4. THE ACPX environment SHALL have the AWS CLI installed for delegation commands
+5. THE agent SHALL be able to perform local file operations, shell commands, and code testing within ACPX
+6. THE agent's SOUL.md SHALL instruct it to delegate heavy execution (deployments, builds, long-running tasks) to remote environments rather than running them locally
 
 ### Requirement 2: AgentCore Runtime Backend (Quick Interactive Tasks)
 

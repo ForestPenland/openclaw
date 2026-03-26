@@ -34,19 +34,52 @@ User (Telegram) → OpenClaw Gateway (Fargate, brain)
                       ↓
               Claude Sonnet 4.6 reasons about the task
                       ↓
-              Compute Router (analyzes task → selects backend)
-                      ↓
-              ┌─────────────────────────────────────────────┐
-              │ AgentCore Runtime  │ Quick tasks, code test  │
-              │ AWS CodeBuild      │ Builds, CDK deploy      │
-              │ EC2 Instance       │ GPU, long-running       │
-              │ ECS Fargate        │ Persistent services     │
-              │ Code Interpreter   │ Sandboxed testing       │
-              │ AgentCore Browser  │ Web interaction         │
-              └─────────────────────────────────────────────┘
-                      ↓
-              Results flow back to brain → Telegram response
+              ACPX (local workspace — draft, test, validate)
+                ├── MCP tools via AgentCore Gateway bridge
+                │     ├── deploy_static_site (Lambda)
+                │     ├── manage_s3 (Lambda)
+                │     └── ... self-extending tool registry
+                ├── AWS CLI (local, for quick queries and delegation)
+                │     ├── aws codebuild start-build (CI/CD tasks)
+                │     ├── agentcore invoke (AgentCore Runtime tasks)
+                │     ├── aws ec2 run-instances (specialized compute)
+                │     └── aws ecs create-service (persistent services)
+                ├── Local file operations (draft CDK code, buildspecs)
+                └── AgentCore Code Interpreter (sandboxed testing)
 ```
+
+## Key Architectural Decision: ACPX as Local Workspace + Remote Delegation
+
+We keep OpenClaw's default ACPX runtime as the agent's local workspace. ACPX
+provides the coding sandbox (file editing, shell commands, code execution, MCP
+tools) that the agent uses to draft, test, and validate work before executing it.
+
+Heavy execution is delegated to remote AWS environments via shell commands and
+MCP tools. The agent uses ACPX as a "staging area" — it writes CDK code locally,
+validates it, then submits it to CodeBuild. It generates a buildspec, tests it,
+then starts the build remotely.
+
+### Why not a custom ACP backend?
+
+We evaluated replacing ACPX with a custom AcpRuntime implementation that routes
+directly to AgentCore Runtime / CodeBuild / EC2. The custom approach is cleaner
+architecturally but has significant downsides:
+
+- **Massive implementation effort**: The AcpRuntime interface has 8+ methods with
+  complex streaming, session management, and error handling. Months of work.
+- **Fragile coupling**: OpenClaw's ACP protocol evolves actively. A custom backend
+  would break on upgrades.
+- **No local reasoning**: The agent can't do quick local operations without spinning
+  up a remote environment. Even trivial tasks become remote calls.
+- **Lost features**: ACPX provides file editing, code execution, MCP tools, and the
+  full Pi coding agent experience for free.
+
+The ACPX + delegation approach gives us:
+- Immediate access to all OpenClaw coding features
+- Local workspace for drafting and testing before remote execution
+- Incremental adoption (add delegation tools one at a time)
+- Stays on OpenClaw's upgrade path
+- The real isolation happens in the remote environments, not the local sandbox
 
 ## Key Design Decisions
 
@@ -69,35 +102,38 @@ User (Telegram) → OpenClaw Gateway (Fargate, brain)
 
 ## Implementation Path
 
-### Phase 1: ACP-to-AgentCore Bridge (Core)
-- Create a custom OpenClaw plugin that registers as an ACP runtime backend
-- Implement `ensureSession()` → AgentCore Runtime session management
-- Implement `runTurn()` → `InvokeAgentRuntime` (for reasoning tasks)
-- Implement shell execution → `InvokeAgentRuntimeCommand` (for deterministic ops)
-- Single Runtime type initially (general-purpose with CDK + AWS CLI)
+### Phase 1: Enable ACPX + MCP Tools
+- Install acpx in the Docker image (Dockerfile.gateway)
+- Enable the ACPX plugin in openclaw.json config
+- Verify MCP tools (AgentCore Gateway bridge) work from within ACPX
+- Test: agent can call deploy_static_site via MCP from the coding sandbox
+- Install AWS CLI in the ACPX environment for delegation commands
 
-### Phase 2: Compute Router + Multiple Backends
-- Add CodeBuild backend for builds and CDK deployments
-- Add EC2 backend for long-running and GPU workloads
-- Implement the compute router that analyzes tasks and selects backends
-- Agent can override the router's decision when it knows better
+### Phase 2: Delegation Tools (CodeBuild + AgentCore Runtime)
+- Create SKILL.md files that teach the agent how to delegate to CodeBuild
+- Create SKILL.md files for AgentCore Runtime delegation
+- Agent can: write buildspec → submit to CodeBuild → monitor → report results
+- Agent can: write code → invoke AgentCore Runtime → stream output → report
+- Add cost estimation before delegation
 
-### Phase 3: Self-Extending Capabilities
+### Phase 3: EC2 + ECS Fargate Delegation
+- SKILL.md for EC2 instance provisioning (GPU, long-running tasks)
+- SKILL.md for ECS Fargate service deployment
+- Agent manages lifecycle: provision → execute → cleanup
+- Auto-termination and orphan cleanup Lambda
+
+### Phase 4: Self-Extending Capabilities
 - Agent can create new Lambda functions and register them as Gateway tools
 - Agent can create new APIs and add them as OpenAPI targets
 - Tool registry in DynamoDB tracks agent-created capabilities
 - The agent's toolset grows over time based on what it builds
 
-### Phase 4: ECS Fargate Backend + Persistent Services
-- Agent can deploy containerized services on Fargate
-- Services persist beyond the task (APIs, workers, scheduled jobs)
-- Agent manages service lifecycle (deploy, update, teardown)
-
-### Phase 5: Multi-Environment Orchestration
-- Agent can run multiple environments in parallel
-- Results from one environment feed into another
-- Supervisor pattern: brain coordinates multiple specialized hands
-- Cost tracking and budget enforcement across all environments
+### Phase 5: Observability + Cost Control
+- Cost tracking per environment and per day
+- Budget enforcement (configurable monthly limit)
+- Concurrency limits (max 3 active environments)
+- Daily cost summary via Telegram
+- CloudWatch dashboard widgets for execution environment usage
 
 ## AgentCore Services Used
 
