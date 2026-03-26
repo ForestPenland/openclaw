@@ -100,7 +100,20 @@ async function main() {
       if (raw) {
         const token = parseSecretToken(raw);
         if (token) {
-          channels.telegram = { botToken: token, dmPolicy: "allowlist", allowFrom: ["8673173617"] };
+          channels.telegram = {
+            botToken: token,
+            dmPolicy: "allowlist",
+            allowFrom: ["8673173617"],
+            // Group config: respond to all messages (no @mention needed)
+            // but only from the operator. Other users are ignored.
+            groupPolicy: "allowlist",
+            groupAllowFrom: ["8673173617"],
+            groups: {
+              "-1003825623171": {
+                requireMention: false,
+              },
+            },
+          };
           hasChannels = true;
         }
       }

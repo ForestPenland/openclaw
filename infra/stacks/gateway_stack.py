@@ -368,6 +368,8 @@ class GatewayStack(Stack):
                 stream_prefix="openclaw-gateway",
                 log_group=self.log_group,
             ),
+            # Give the SIGTERM handler time to flush sessions to S3
+            stop_timeout=Duration.seconds(120),
             environment={
                 "WORKSPACE_BUCKET": workspace_bucket.bucket_name,
                 "TENANT_ID": "default-tenant",
