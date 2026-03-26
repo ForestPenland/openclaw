@@ -143,21 +143,34 @@ async function main() {
       try {
         const gwCreds = JSON.parse(gatewaySecretRaw);
         if (gwCreds.mcp_url && gwCreds.client_id && gwCreds.client_secret && gwCreds.token_url) {
-          config.mcp = {
-            servers: {
-              "aws-tools": {
-                command: "node",
-                args: ["/app/scripts/mcp-gateway-bridge.mjs"],
-                env: {
-                  GATEWAY_MCP_URL: gwCreds.mcp_url,
-                  GATEWAY_CLIENT_ID: gwCreds.client_id,
-                  GATEWAY_CLIENT_SECRET: gwCreds.client_secret,
-                  GATEWAY_TOKEN_URL: gwCreds.token_url,
-                  GATEWAY_SCOPE: gwCreds.scope || "",
-                },
-              },
+          // MCP servers go in the acpx plugin config (coding agent sandbox)
+          // AND in mcp.servers (for the CLI and future direct support)
+          const mcpBridgeConfig = {
+            command: "node",
+            args: ["/app/scripts/mcp-gateway-bridge.mjs"],
+            env: {
+              GATEWAY_MCP_URL: gwCreds.mcp_url,
+              GATEWAY_CLIENT_ID: gwCreds.client_id,
+              GATEWAY_CLIENT_SECRET: gwCreds.client_secret,
+              GATEWAY_TOKEN_URL: gwCreds.token_url,
+              GATEWAY_SCOPE: gwCreds.scope || "",
             },
           };
+
+          // Configure for the coding agent (acpx/Pi sandbox)
+          config.plugins = config.plugins || {};
+          config.plugins.acpx = config.plugins.acpx || {};
+          config.plugins.acpx.mcpServers = {
+            "aws-tools": mcpBridgeConfig,
+          };
+
+          // Also configure in mcp.servers for CLI access
+          config.mcp = {
+            servers: {
+              "aws-tools": mcpBridgeConfig,
+            },
+          };
+
           log("info", "AgentCore Gateway MCP bridge configured", { url: gwCreds.mcp_url });
         }
       } catch (e) {
