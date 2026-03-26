@@ -202,6 +202,25 @@ class GatewayStack(Stack):
             )
         )
 
+        # IAM: create service-linked roles for AWS services (Bedrock
+        # AgentCore, etc.) that auto-create SLRs on first use.
+        task_role.add_to_principal_policy(
+            iam.PolicyStatement(
+                sid="AllowCreateServiceLinkedRole",
+                actions=["iam:CreateServiceLinkedRole"],
+                resources=["arn:aws:iam::*:role/aws-service-role/*"],
+                conditions={
+                    "StringLike": {
+                        "iam:AWSServiceName": [
+                            "bedrock.amazonaws.com",
+                            "bedrock-agentcore.amazonaws.com",
+                            "agentcore.bedrock.amazonaws.com",
+                        ]
+                    }
+                },
+            )
+        )
+
         # DynamoDB: access to role tracking and environment tables
         task_role.add_to_principal_policy(
             iam.PolicyStatement(
