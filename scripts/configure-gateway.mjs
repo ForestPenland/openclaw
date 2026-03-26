@@ -100,7 +100,7 @@ async function main() {
       if (raw) {
         const token = parseSecretToken(raw);
         if (token) {
-          channels.telegram = { botToken: token, dmPolicy: "open", allowFrom: ["*"] };
+          channels.telegram = { botToken: token, dmPolicy: "open", allowFrom: ["8673173617"] };
           hasChannels = true;
         }
       }
@@ -133,6 +133,35 @@ async function main() {
 
     if (hasChannels) {
       config.channels = channels;
+    }
+
+    // MCP servers — AgentCore Gateway bridge
+    // Read Gateway credentials from Secrets Manager
+    const gatewaySecretName = process.env.AGENTCORE_GATEWAY_SECRET_NAME || "openclaw/agentcore-gateway-credentials";
+    const gatewaySecretRaw = await getSecretValue(client, gatewaySecretName);
+    if (gatewaySecretRaw) {
+      try {
+        const gwCreds = JSON.parse(gatewaySecretRaw);
+        if (gwCreds.mcp_url && gwCreds.client_id && gwCreds.client_secret && gwCreds.token_url) {
+          config.mcpServers = {
+            "aws-tools": {
+              command: "node",
+              args: ["/app/scripts/mcp-gateway-bridge.mjs"],
+              type: "stdio",
+              env: {
+                GATEWAY_MCP_URL: gwCreds.mcp_url,
+                GATEWAY_CLIENT_ID: gwCreds.client_id,
+                GATEWAY_CLIENT_SECRET: gwCreds.client_secret,
+                GATEWAY_TOKEN_URL: gwCreds.token_url,
+                GATEWAY_SCOPE: gwCreds.scope || "",
+              },
+            },
+          };
+          log("info", "AgentCore Gateway MCP bridge configured", { url: gwCreds.mcp_url });
+        }
+      } catch (e) {
+        log("warn", "Failed to parse AgentCore Gateway credentials", { error: String(e) });
+      }
     }
 
     log("info", "Gateway config generated from Secrets Manager", {
