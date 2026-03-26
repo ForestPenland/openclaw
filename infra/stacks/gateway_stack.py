@@ -88,94 +88,149 @@ class GatewayStack(Stack):
             ),
         )
 
-        # --- Task Role Permissions ---
+        # ── Task Role Permissions ─────────────────────────────────
+        # The task role is the base identity for an autonomous agent.
+        # Broad service access is granted here; the permission boundary
+        # on agent-created roles is the hard security ceiling.
         task_role = self.task_definition.task_role
+        _ACCOUNT = Stack.of(self).account
 
-        # S3: read/write workspace files
+        # S3: workspace bucket (CDK grant) + broad S3 for dynamic buckets
         workspace_bucket.grant_read_write(task_role)
-        task_role.add_to_principal_policy(
-            iam.PolicyStatement(
-                actions=["s3:ListBucket"],
-                resources=[workspace_bucket.bucket_arn],
-            )
-        )
 
-        # Bedrock: model invocation + model discovery
-        task_role.add_to_principal_policy(
-            iam.PolicyStatement(
-                actions=[
-                    "bedrock:InvokeModel",
-                    "bedrock:InvokeModelWithResponseStream",
-                    "bedrock:ListFoundationModels",
-                    "bedrock:GetFoundationModel",
-                ],
-                resources=["*"],
-            )
-        )
-
-        # AWS Marketplace: required for first invocation of marketplace
-        # models (e.g. Anthropic Claude). Amazon models (Nova) don't need
-        # this but it's harmless to include.
-        task_role.add_to_principal_policy(
-            iam.PolicyStatement(
-                actions=[
-                    "aws-marketplace:ViewSubscriptions",
-                    "aws-marketplace:Subscribe",
-                    "aws-marketplace:Unsubscribe",
-                ],
-                resources=["*"],
-            )
-        )
-
-        # DynamoDB: access to memory, sessions, and agents tables
+        # DynamoDB: core tables (CDK grant)
         memory_table.grant_read_write_data(task_role)
         sessions_table.grant_read_write_data(task_role)
         agents_table.grant_read_write_data(task_role)
 
-        # AgentCore: runtime operations
+        # ── Broad service access for autonomous operation ────────
         task_role.add_to_principal_policy(
             iam.PolicyStatement(
-                actions=["bedrock-agent-runtime:*"],
+                sid="AgentServiceAccess",
+                actions=[
+                    # S3 (dynamic bucket creation + management)
+                    "s3:*",
+                    # Bedrock (model invocation + discovery)
+                    "bedrock:InvokeModel",
+                    "bedrock:InvokeModelWithResponseStream",
+                    "bedrock:ListFoundationModels",
+                    "bedrock:GetFoundationModel",
+                    "bedrock-agent-runtime:*",
+                    "bedrock-agentcore:*",
+                    "bedrock-agentcore-control:*",
+                    # AWS Marketplace (third-party model access)
+                    "aws-marketplace:ViewSubscriptions",
+                    "aws-marketplace:Subscribe",
+                    "aws-marketplace:Unsubscribe",
+                    # Secrets Manager (full CRUD for agent-managed secrets)
+                    "secretsmanager:CreateSecret",
+                    "secretsmanager:GetSecretValue",
+                    "secretsmanager:PutSecretValue",
+                    "secretsmanager:UpdateSecret",
+                    "secretsmanager:DeleteSecret",
+                    "secretsmanager:DescribeSecret",
+                    "secretsmanager:ListSecrets",
+                    # CodeBuild (CI/CD delegation)
+                    "codebuild:StartBuild",
+                    "codebuild:StopBuild",
+                    "codebuild:BatchGetBuilds",
+                    "codebuild:ListProjects",
+                    "codebuild:BatchGetProjects",
+                    "codebuild:CreateProject",
+                    "codebuild:UpdateProject",
+                    # ECR (container image management)
+                    "ecr:GetAuthorizationToken",
+                    "ecr:BatchCheckLayerAvailability",
+                    "ecr:GetDownloadUrlForLayer",
+                    "ecr:BatchGetImage",
+                    "ecr:InitiateLayerUpload",
+                    "ecr:UploadLayerPart",
+                    "ecr:CompleteLayerUpload",
+                    "ecr:PutImage",
+                    "ecr:CreateRepository",
+                    "ecr:DescribeRepositories",
+                    "ecr:DeleteRepository",
+                    # CloudFormation (infrastructure awareness)
+                    "cloudformation:ListStacks",
+                    "cloudformation:DescribeStacks",
+                    "cloudformation:DescribeStackResources",
+                    "cloudformation:GetTemplate",
+                    "cloudformation:ListStackResources",
+                    # Cognito (identity management for Gateway tools)
+                    "cognito-idp:CreateUserPoolClient",
+                    "cognito-idp:DescribeUserPoolClient",
+                    "cognito-idp:DeleteUserPoolClient",
+                    "cognito-idp:ListUserPoolClients",
+                    "cognito-idp:CreateResourceServer",
+                    "cognito-idp:DescribeResourceServer",
+                    "cognito-idp:DeleteResourceServer",
+                    "cognito-idp:UpdateUserPoolClient",
+                    # CloudWatch Logs
+                    "logs:CreateLogGroup",
+                    "logs:CreateLogStream",
+                    "logs:PutLogEvents",
+                    "logs:GetLogEvents",
+                    "logs:FilterLogEvents",
+                    "logs:DescribeLogGroups",
+                    "logs:DescribeLogStreams",
+                    # SSM Parameter Store
+                    "ssm:GetParameter",
+                    "ssm:GetParameters",
+                    "ssm:PutParameter",
+                    "ssm:DeleteParameter",
+                    "ssm:DescribeParameters",
+                    # Lambda (tool creation + management)
+                    "lambda:CreateFunction",
+                    "lambda:UpdateFunctionCode",
+                    "lambda:UpdateFunctionConfiguration",
+                    "lambda:InvokeFunction",
+                    "lambda:GetFunction",
+                    "lambda:ListFunctions",
+                    "lambda:DeleteFunction",
+                    "lambda:AddPermission",
+                    "lambda:RemovePermission",
+                    # DynamoDB (dynamic table creation + full item ops)
+                    "dynamodb:*",
+                    # EC2 (read-only awareness)
+                    "ec2:Describe*",
+                    # ECS (read-only awareness)
+                    "ecs:DescribeTasks",
+                    "ecs:DescribeServices",
+                    "ecs:ListTasks",
+                    "ecs:ListServices",
+                    "ecs:DescribeTaskDefinition",
+                    # SNS (notifications)
+                    "sns:Publish",
+                    "sns:ListTopics",
+                ],
                 resources=["*"],
             )
         )
 
-        # Secrets Manager: read channel secrets (Telegram bot token, etc.)
-        task_role.add_to_principal_policy(
-            iam.PolicyStatement(
-                actions=["secretsmanager:GetSecretValue"],
-                resources=["arn:aws:secretsmanager:*:*:secret:openclaw/*"],
-            )
-        )
-
-        # IAM: create task-scoped roles with mandatory permission boundary.
-        # CreateRole requires the boundary condition so the agent can never
-        # create an unbounded role.
+        # ── IAM: role factory (scoped to agent-task-* prefix) ────
+        # CreateRole requires the boundary condition — agent cannot
+        # create unbounded roles.
         task_role.add_to_principal_policy(
             iam.PolicyStatement(
                 sid="AllowAgentTaskRoleCreate",
-                actions=[
-                    "iam:CreateRole",
-                ],
-                resources=[
-                    f"arn:aws:iam::{Stack.of(self).account}:role/agent-task-*"
-                ],
+                actions=["iam:CreateRole"],
+                resources=[f"arn:aws:iam::{_ACCOUNT}:role/agent-task-*"],
                 conditions={
                     "StringEquals": {
-                        "iam:PermissionsBoundary": f"arn:aws:iam::{Stack.of(self).account}:policy/agent-permission-boundary"
+                        "iam:PermissionsBoundary": f"arn:aws:iam::{_ACCOUNT}:policy/agent-permission-boundary"
                     }
                 },
             )
         )
 
-        # IAM: manage existing agent-task-* roles (no boundary condition
-        # needed — these actions operate on already-created roles).
+        # Manage existing agent-task-* roles
         task_role.add_to_principal_policy(
             iam.PolicyStatement(
                 sid="AllowAgentTaskRoleManage",
                 actions=[
                     "iam:DeleteRole",
                     "iam:PutRolePolicy",
+                    "iam:GetRolePolicy",
                     "iam:DeleteRolePolicy",
                     "iam:AttachRolePolicy",
                     "iam:DetachRolePolicy",
@@ -184,61 +239,48 @@ class GatewayStack(Stack):
                     "iam:ListRolePolicies",
                     "iam:ListAttachedRolePolicies",
                     "iam:PassRole",
+                    "iam:UpdateAssumeRolePolicy",
+                    "iam:PutRolePermissionsBoundary",
+                    "iam:CreatePolicy",
                 ],
                 resources=[
-                    f"arn:aws:iam::{Stack.of(self).account}:role/agent-task-*"
+                    f"arn:aws:iam::{_ACCOUNT}:role/agent-task-*",
+                    f"arn:aws:iam::{_ACCOUNT}:policy/agent-task-*",
                 ],
             )
         )
 
-        # STS: assume agent-task-* roles for elevated permissions
+        # STS: assume agent-task-* roles + identity
         task_role.add_to_principal_policy(
             iam.PolicyStatement(
                 sid="AllowAssumeAgentTaskRoles",
-                actions=["sts:AssumeRole"],
-                resources=[
-                    f"arn:aws:iam::{Stack.of(self).account}:role/agent-task-*"
-                ],
+                actions=["sts:AssumeRole", "sts:GetCallerIdentity"],
+                resources=[f"arn:aws:iam::{_ACCOUNT}:role/agent-task-*"],
             )
         )
 
-        # IAM: create service-linked roles for AWS services (Bedrock
-        # AgentCore, etc.) that auto-create SLRs on first use.
+        # STS: GetCallerIdentity on * (not resource-scoped)
         task_role.add_to_principal_policy(
             iam.PolicyStatement(
-                sid="AllowCreateServiceLinkedRole",
-                actions=["iam:CreateServiceLinkedRole"],
-                resources=["arn:aws:iam::*:role/aws-service-role/*"],
-                conditions={
-                    "StringLike": {
-                        "iam:AWSServiceName": [
-                            "bedrock.amazonaws.com",
-                            "bedrock-agentcore.amazonaws.com",
-                            "agentcore.bedrock.amazonaws.com",
-                        ]
-                    }
-                },
+                sid="AllowSTSIdentity",
+                actions=["sts:GetCallerIdentity"],
+                resources=["*"],
             )
         )
 
-        # DynamoDB: access to role tracking and environment tables
+        # IAM: read-only discovery + service-linked role creation
         task_role.add_to_principal_policy(
             iam.PolicyStatement(
-                sid="AllowComputeEnvTables",
+                sid="AllowIAMDiscovery",
                 actions=[
-                    "dynamodb:PutItem",
-                    "dynamodb:GetItem",
-                    "dynamodb:UpdateItem",
-                    "dynamodb:DeleteItem",
-                    "dynamodb:Scan",
-                    "dynamodb:Query",
+                    "iam:ListRoles",
+                    "iam:ListPolicies",
+                    "iam:GetPolicy",
+                    "iam:GetPolicyVersion",
+                    "iam:ListInstanceProfiles",
+                    "iam:CreateServiceLinkedRole",
                 ],
-                resources=[
-                    f"arn:aws:dynamodb:*:*:table/openclaw-agent-roles",
-                    f"arn:aws:dynamodb:*:*:table/openclaw-environments",
-                    f"arn:aws:dynamodb:*:*:table/openclaw-cost-ledger",
-                    f"arn:aws:dynamodb:*:*:table/openclaw-tool-registry",
-                ],
+                resources=["*"],
             )
         )
 

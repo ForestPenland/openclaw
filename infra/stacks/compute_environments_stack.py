@@ -84,43 +84,100 @@ class ComputeEnvironmentsStack(Stack):
         )
 
         # ── Permission Boundary ─────────────────────────────────
-        # The boundary is the hard ceiling for agent-created roles.
-        # Strategy: deny privilege escalation and billing, but allow
-        # operational IAM (PassRole, CreateServiceLinkedRole) and all
-        # other AWS services so the agent can wire things together.
+        # Hard security ceiling for all agent-created (agent-task-*) roles.
+        # Strategy: allow all AWS service operations within this account,
+        # deny cross-account access and privilege escalation. Least-privilege
+        # is enforced at the individual role policy level, not here.
+
+        _ACCOUNT = Stack.of(self).account
+        _BOUNDARY_ARN = f"arn:aws:iam::{_ACCOUNT}:policy/agent-permission-boundary"
 
         self.permission_boundary = iam.ManagedPolicy(
             self,
             "AgentPermissionBoundary",
             managed_policy_name="agent-permission-boundary",
             statements=[
-                # Deny privilege escalation — the agent must never be able
-                # to modify the boundary itself, create unbounded roles,
-                # or touch account-level settings.
+                # ── Allow all actions on resources in this account ───
                 iam.PolicyStatement(
-                    sid="DenyPrivilegeEscalation",
+                    sid="AllowAllInAccount",
+                    effect=iam.Effect.ALLOW,
+                    actions=["*"],
+                    resources=["*"],
+                    conditions={
+                        "StringEquals": {
+                            "aws:ResourceAccount": _ACCOUNT,
+                        }
+                    },
+                ),
+                # Global/non-regional actions that don't support
+                # aws:ResourceAccount (IAM list, STS identity, S3 list, etc.)
+                iam.PolicyStatement(
+                    sid="AllowGlobalActions",
+                    effect=iam.Effect.ALLOW,
+                    actions=[
+                        "iam:ListRoles",
+                        "iam:ListPolicies",
+                        "iam:GetPolicy",
+                        "iam:GetPolicyVersion",
+                        "iam:ListInstanceProfiles",
+                        "iam:CreateServiceLinkedRole",
+                        "sts:GetCallerIdentity",
+                        "sts:GetSessionToken",
+                        "s3:ListAllMyBuckets",
+                        "s3:GetBucketLocation",
+                        "bedrock:ListFoundationModels",
+                        "bedrock:GetFoundationModel",
+                    ],
+                    resources=["*"],
+                ),
+                # ── Cross-account firewall ───────────────────────
+                # Block assuming any role outside this account.
+                iam.PolicyStatement(
+                    sid="DenyCrossAccountAssume",
+                    effect=iam.Effect.DENY,
+                    actions=["sts:AssumeRole", "sts:AssumeRoleWithSAML", "sts:AssumeRoleWithWebIdentity"],
+                    not_resources=[f"arn:aws:iam::{_ACCOUNT}:role/*"],
+                ),
+                # ── Boundary tamper protection ───────────────────
+                # Cannot modify/delete the boundary policy itself.
+                iam.PolicyStatement(
+                    sid="DenyBoundaryTamper",
                     effect=iam.Effect.DENY,
                     actions=[
-                        # Cannot modify or delete the permission boundary
                         "iam:DeletePolicy",
                         "iam:DeletePolicyVersion",
                         "iam:CreatePolicyVersion",
                         "iam:SetDefaultPolicyVersion",
-                        # Cannot remove boundary from roles
+                    ],
+                    resources=[_BOUNDARY_ARN],
+                ),
+                # Cannot remove or change the boundary on agent-task-* roles.
+                iam.PolicyStatement(
+                    sid="DenyBoundaryRemoval",
+                    effect=iam.Effect.DENY,
+                    actions=[
                         "iam:DeleteRolePermissionsBoundary",
-                        # Cannot create users or access keys (only roles)
+                        "iam:PutRolePermissionsBoundary",
+                    ],
+                    resources=[f"arn:aws:iam::{_ACCOUNT}:role/agent-task-*"],
+                ),
+                # ── Privilege escalation prevention ──────────────
+                # No long-lived credentials (users, access keys, login profiles).
+                iam.PolicyStatement(
+                    sid="DenyLongLivedCredentials",
+                    effect=iam.Effect.DENY,
+                    actions=[
                         "iam:CreateUser",
                         "iam:CreateAccessKey",
                         "iam:CreateLoginProfile",
                         "iam:UpdateLoginProfile",
-                        # Cannot touch identity providers or SAML
                         "iam:CreateSAMLProvider",
                         "iam:UpdateSAMLProvider",
                         "iam:CreateOpenIDConnectProvider",
                     ],
                     resources=["*"],
                 ),
-                # Deny account/billing/org actions
+                # ── Account/billing/org lockout ──────────────────
                 iam.PolicyStatement(
                     sid="DenyAccountAndBilling",
                     effect=iam.Effect.DENY,
@@ -132,79 +189,6 @@ class ComputeEnvironmentsStack(Stack):
                         "ce:*",
                         "cur:*",
                     ],
-                    resources=["*"],
-                ),
-                # Allow scoped IAM role management (agent-task-* prefix)
-                iam.PolicyStatement(
-                    sid="AllowScopedRoleManagement",
-                    effect=iam.Effect.ALLOW,
-                    actions=[
-                        "iam:CreateRole",
-                        "iam:DeleteRole",
-                        "iam:PutRolePolicy",
-                        "iam:DeleteRolePolicy",
-                        "iam:AttachRolePolicy",
-                        "iam:DetachRolePolicy",
-                        "iam:TagRole",
-                        "iam:GetRole",
-                        "iam:GetRolePolicy",
-                        "iam:ListRolePolicies",
-                        "iam:ListAttachedRolePolicies",
-                        "iam:PassRole",
-                        "iam:UpdateAssumeRolePolicy",
-                    ],
-                    resources=[
-                        f"arn:aws:iam::{Stack.of(self).account}:role/agent-task-*"
-                    ],
-                ),
-                # Allow PassRole to AWS services (CodeBuild, ECS, Lambda, etc.)
-                # This is the key permission for wiring services together.
-                iam.PolicyStatement(
-                    sid="AllowPassRoleToServices",
-                    effect=iam.Effect.ALLOW,
-                    actions=["iam:PassRole"],
-                    resources=[f"arn:aws:iam::{Stack.of(self).account}:role/agent-task-*"],
-                    conditions={
-                        "StringLike": {
-                            "iam:PassedToService": [
-                                "codebuild.amazonaws.com",
-                                "ecs-tasks.amazonaws.com",
-                                "lambda.amazonaws.com",
-                                "bedrock.amazonaws.com",
-                                "events.amazonaws.com",
-                                "states.amazonaws.com",
-                            ]
-                        }
-                    },
-                ),
-                # Allow read-only IAM for discovery
-                iam.PolicyStatement(
-                    sid="AllowIAMReadOnly",
-                    effect=iam.Effect.ALLOW,
-                    actions=[
-                        "iam:ListRoles",
-                        "iam:ListPolicies",
-                        "iam:GetPolicy",
-                        "iam:GetPolicyVersion",
-                        "iam:ListInstanceProfiles",
-                        "iam:CreateServiceLinkedRole",
-                    ],
-                    resources=["*"],
-                ),
-                # Allow STS AssumeRole for agent-task-* roles
-                iam.PolicyStatement(
-                    sid="AllowAssumeAgentRoles",
-                    effect=iam.Effect.ALLOW,
-                    actions=["sts:AssumeRole", "sts:GetCallerIdentity"],
-                    resources=[
-                        f"arn:aws:iam::{Stack.of(self).account}:role/agent-task-*"
-                    ],
-                ),
-                # Allow everything else (all non-IAM/non-billing services)
-                iam.PolicyStatement(
-                    sid="AllowAllOtherActions",
-                    effect=iam.Effect.ALLOW,
-                    actions=["*"],
                     resources=["*"],
                 ),
             ],
