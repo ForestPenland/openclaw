@@ -7,12 +7,25 @@ inclusion: auto
 ## The Concept
 
 The OpenClaw agent on Fargate is the "brain" — it reasons, plans, and decides what to do.
-AgentCore Runtime provides the "hands" — dynamically provisioned Firecracker microVMs
-that execute tasks in isolated, purpose-built environments.
+AWS compute services provide the "hands" — dynamically provisioned execution environments
+tailored to each task. The agent doesn't have a fixed set of tools or a single sandbox.
+It intelligently selects and provisions the right compute environment for the job.
 
-The agent doesn't have a fixed set of tools. It can intelligently spin up new,
-purpose-built AgentCore Runtime environments to execute specific tasks. Each microVM
-is tailored to the task at hand, used, and discarded.
+The spectrum of execution environments:
+
+- **AgentCore Runtime** (Firecracker microVMs): Quick interactive tasks, code testing,
+  shell commands. Starts in seconds, scales to zero, consumption-based pricing.
+- **AWS CodeBuild**: CI/CD pipelines, Docker builds, CDK deployments. Managed build
+  environments with caching and artifact management.
+- **EC2 Instances**: Long-running processes, GPU workloads, custom OS requirements.
+  Provisioned on demand via SSM, auto-terminated after use.
+- **ECS Fargate**: Persistent containerized services (APIs, workers, scheduled jobs).
+  Deployed and managed by the agent.
+- **AgentCore Code Interpreter**: Sandboxed code execution for testing before deployment.
+- **AgentCore Browser**: Cloud browser for web interaction tasks.
+
+The agent decides which environment to use based on task characteristics: duration,
+resource needs, required tools, persistence, and cost sensitivity.
 
 ## Architecture
 
@@ -21,14 +34,18 @@ User (Telegram) → OpenClaw Gateway (Fargate, brain)
                       ↓
               Claude Sonnet 4.6 reasons about the task
                       ↓
-              Custom ACP Runtime Backend (bridges to AgentCore)
+              Compute Router (analyzes task → selects backend)
                       ↓
-              Dynamically creates purpose-built Firecracker microVMs:
-                ├── Infra Runtime: CDK, AWS CLI, CloudFormation
-                ├── Data Runtime: Python, pandas, matplotlib
-                ├── Code Runtime: Node.js, testing frameworks
-                ├── Browser Runtime: AgentCore Browser for web tasks
-                └── Custom Runtime: agent decides what tools to install
+              ┌─────────────────────────────────────────────┐
+              │ AgentCore Runtime  │ Quick tasks, code test  │
+              │ AWS CodeBuild      │ Builds, CDK deploy      │
+              │ EC2 Instance       │ GPU, long-running       │
+              │ ECS Fargate        │ Persistent services     │
+              │ Code Interpreter   │ Sandboxed testing       │
+              │ AgentCore Browser  │ Web interaction         │
+              └─────────────────────────────────────────────┘
+                      ↓
+              Results flow back to brain → Telegram response
 ```
 
 ## Key Design Decisions
@@ -52,28 +69,35 @@ User (Telegram) → OpenClaw Gateway (Fargate, brain)
 
 ## Implementation Path
 
-### Phase 1: Basic ACP-to-AgentCore Bridge
+### Phase 1: ACP-to-AgentCore Bridge (Core)
 - Create a custom OpenClaw plugin that registers as an ACP runtime backend
-- Implement `ensureSession()` → `CreateAgentRuntime` or reuse existing
+- Implement `ensureSession()` → AgentCore Runtime session management
 - Implement `runTurn()` → `InvokeAgentRuntime` (for reasoning tasks)
 - Implement shell execution → `InvokeAgentRuntimeCommand` (for deterministic ops)
 - Single Runtime type initially (general-purpose with CDK + AWS CLI)
 
-### Phase 2: Dynamic Runtime Selection
-- Agent analyzes the task and selects the appropriate Runtime type
-- Multiple pre-configured Runtime templates (infra, data, code, browser)
-- Runtime selection logic in the ACP backend based on task metadata
+### Phase 2: Compute Router + Multiple Backends
+- Add CodeBuild backend for builds and CDK deployments
+- Add EC2 backend for long-running and GPU workloads
+- Implement the compute router that analyzes tasks and selects backends
+- Agent can override the router's decision when it knows better
 
-### Phase 3: Self-Extending Runtimes
-- Agent can request custom Runtime configurations
-- Install packages dynamically in the microVM
-- Create new tool definitions on the fly
-- Register new MCP tools in the Gateway based on what the agent builds
+### Phase 3: Self-Extending Capabilities
+- Agent can create new Lambda functions and register them as Gateway tools
+- Agent can create new APIs and add them as OpenAPI targets
+- Tool registry in DynamoDB tracks agent-created capabilities
+- The agent's toolset grows over time based on what it builds
 
-### Phase 4: Multi-Runtime Orchestration
-- Agent can run multiple Runtimes in parallel
-- Results from one Runtime feed into another
+### Phase 4: ECS Fargate Backend + Persistent Services
+- Agent can deploy containerized services on Fargate
+- Services persist beyond the task (APIs, workers, scheduled jobs)
+- Agent manages service lifecycle (deploy, update, teardown)
+
+### Phase 5: Multi-Environment Orchestration
+- Agent can run multiple environments in parallel
+- Results from one environment feed into another
 - Supervisor pattern: brain coordinates multiple specialized hands
+- Cost tracking and budget enforcement across all environments
 
 ## AgentCore Services Used
 
