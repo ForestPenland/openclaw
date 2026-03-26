@@ -163,6 +163,7 @@ async function main() {
           config.plugins = config.plugins || {};
           config.plugins.entries = config.plugins.entries || {};
           config.plugins.entries.acpx = {
+            enabled: true,
             config: {
               mcpServers: {
                 "aws-tools": mcpBridgeConfig,
