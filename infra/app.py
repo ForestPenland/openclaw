@@ -35,6 +35,7 @@ from stacks.memory_stack import MemoryStack
 from stacks.scheduler_stack import SchedulerStack
 from stacks.builder_stack import BuilderStack
 from stacks.agentcore_gateway_stack import AgentCoreGatewayStack
+from stacks.compute_environments_stack import ComputeEnvironmentsStack
 
 app = cdk.App()
 
@@ -86,5 +87,9 @@ builder.add_dependency(storage)
 # --- AgentCore Gateway tools ---
 
 agentcore_gw = AgentCoreGatewayStack(app, "OpenClawAgentCoreTools")
+
+# --- Compute Environments (dynamic execution) ---
+
+compute_envs = ComputeEnvironmentsStack(app, "OpenClawComputeEnvironments")
 
 app.synth()
