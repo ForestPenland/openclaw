@@ -2,7 +2,7 @@
 
 Deploy the OpenClaw AI agent framework on AWS using ECS Fargate, Amazon Bedrock, and CDK.
 
-The OpenClaw Gateway runs as a Docker container on Fargate. It handles Telegram, Slack, and WebSocket messaging natively — no custom webhook Lambdas or SQS queues in the messaging path. Amazon Bedrock (Nova Lite by default) provides the AI model via OpenClaw's provider plugin system. Workspace files (SOUL.md, MEMORY.md, etc.) are synced from S3 at startup.
+The OpenClaw Gateway runs as a Docker container on Fargate. It handles Telegram, Slack, and WebSocket messaging natively — no custom webhook Lambdas or SQS queues in the messaging path. Amazon Bedrock provides the AI model via OpenClaw's provider plugin system (default: Claude Sonnet 4.6 via cross-region inference). Workspace files (SOUL.md, MEMORY.md, etc.) are synced from S3 at startup.
 
 ## Table of Contents
 
@@ -87,13 +87,13 @@ cd openclaw/infra
 cdk deploy --all --profile openclaw-dev --require-approval broadening
 ```
 
-CDK builds the custom Docker image from `Dockerfile.gateway`, pushes it to ECR, and deploys all 9 stacks in dependency order. First deployment takes ~10–15 minutes (Docker build is the bottleneck). Subsequent deploys are faster due to layer caching.
+CDK builds the custom Docker image from `Dockerfile.gateway`, pushes it to ECR, and deploys all 10 stacks in dependency order. First deployment takes ~10–15 minutes (Docker build is the bottleneck). Subsequent deploys are faster due to layer caching.
 
 ### Step 4: Verify Deployment
 
 ```bash
 # All stacks should show CREATE_COMPLETE or UPDATE_COMPLETE
-for stack in OpenClawStorage OpenClawGateway OpenClawIdentity OpenClawApi OpenClawMemory OpenClawScheduler OpenClawBuilder OpenClawAgentCoreTools OpenClawComputeEnvironments; do
+for stack in OpenClawStorage OpenClawGateway OpenClawIdentity OpenClawApi OpenClawMemory OpenClawScheduler OpenClawBuilder OpenClawAgentCoreTools OpenClawComputeEnvironments OpenClawHealth; do
   echo -n "$stack: "
   aws cloudformation describe-stacks \
     --stack-name $stack \
@@ -115,13 +115,36 @@ All stacks are defined in `infra/stacks/` and wired together in `infra/app.py`.
 | **OpenClawGateway** | VPC (2 AZs, 1 NAT GW), ECS Fargate cluster, task definition (1024 CPU / 2048 MiB), Gateway service, CloudWatch log group. Builds custom Docker image from `Dockerfile.gateway`. ACPX enabled with MCP bridge to AgentCore Gateway. Task role includes Bedrock, S3, DynamoDB, IAM (role factory), STS, Secrets Manager permissions |
 | **OpenClawIdentity** | Cognito user pool (invite-only), Secrets Manager secrets for Telegram/Slack/GitHub tokens |
 | **OpenClawApi** | HTTP API Gateway, WebSocket API Gateway, webhook Lambda, SQS queue. **Not in the messaging path** — exists for future webhook-based channels |
-| **OpenClawMemory** | SSM parameter for AgentCore Memory store ID, IAM policy for memory access. Placeholder — memory store not yet created at runtime |
-| **OpenClawScheduler** | Heartbeat Lambda (30-min), memory consolidation Lambda (nightly 02:00 UTC), EventBridge rules, SNS alerts topic. Lambda handlers are stubs |
+| **OpenClawMemory** | SSM parameters for AgentCore Memory store config (store ID, strategy IDs), IAM policy for memory access, ECR repository for MemoryAgent container. Memory store created by agent at first boot |
+| **OpenClawScheduler** | Heartbeat Lambda (30-min), memory consolidation Lambda (nightly 02:00 UTC), EventBridge rules, SNS alerts topic |
 | **OpenClawBuilder** | Builder agent IAM role with permission boundary (denies IAM/Organizations/Billing actions). Not yet used |
 | **OpenClawAgentCoreTools** | Lambda for `deploy_static_site` tool. Registered as AgentCore Gateway target. MCP bridge connects to it via ACPX coding sessions |
 | **OpenClawComputeEnvironments** | 4 DynamoDB tables (environments, agent-roles, tool-registry, cost-ledger), cleanup Lambda, EventBridge schedules (30min environment cleanup, 6hr role cleanup), `agent-permission-boundary` managed policy, SNS lifecycle notifications topic |
+| **OpenClawHealth** | CloudWatch alarms (task-down, CPU high, memory high), ECS task-stopped EventBridge rule, SNS health alerts topic. Depends on Gateway |
 
-Dependency order: Storage → Gateway, Api, Memory, Scheduler, Builder. Identity → Api. AgentCoreTools and ComputeEnvironments have no dependencies.
+Dependency order: Storage → Gateway, Api, Memory, Scheduler, Builder. Identity → Api. Gateway → Health. AgentCoreTools and ComputeEnvironments have no dependencies.
+
+---
+
+## Included Skills
+
+The deployment includes foundational skills in `workspace-seeds/skills/` that teach the agent how to extend itself:
+
+| Skill | Purpose |
+|-------|---------|
+| **agentcore-agent-builder** | Build, deploy, and register new AI agents on AgentCore Runtime as MCP tools |
+| **role-factory** | Create task-scoped IAM roles with permission boundaries for elevated operations |
+| **aws-infrastructure** | AWS CLI patterns for direct host execution (S3, CloudFormation, ECS) |
+
+These skills are uploaded to S3 during workspace seeding and loaded by the Gateway at startup. The agent uses them to autonomously create new capabilities — see [Extending Your Agent](docs/extending-your-agent.md) for examples.
+
+### Reference Implementation: MemoryAgent
+
+The `agents/memory-agent/` directory contains a complete working example of a FastMCP agent:
+- `agent.py` — 4 MCP tools for AgentCore Memory (store, search, context, list)
+- `Dockerfile` — Python 3.11-slim container
+- `buildspec.yml` — CodeBuild spec for ARM64 image builds
+- `requirements.txt` — mcp, strands-agents, bedrock-agentcore, boto3
 
 ---
 
@@ -238,7 +261,7 @@ aws secretsmanager put-secret-value \
 
 ## Changing the AI Model
 
-The default model is `amazon.nova-lite-v1:0`. To change it:
+The default model is `us.anthropic.claude-sonnet-4-6`. To change it:
 
 1. Edit `infra/stacks/gateway_stack.py` — update the `BEDROCK_MODEL_ID` environment variable:
 

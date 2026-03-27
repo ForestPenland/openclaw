@@ -15,17 +15,18 @@ inclusion: manual
 
 ## Stack Architecture
 
-9 stacks, deployed in dependency order:
+10 stacks, deployed in dependency order:
 
 1. **OpenClawStorage** — S3 buckets (workspace, skills, artifacts) + 5 DynamoDB tables (memory, sessions, agents, dedup, connections). No dependencies
 2. **OpenClawIdentity** — Cognito user pool + Secrets Manager secrets (Telegram, Slack, GitHub tokens). No dependencies
 3. **OpenClawGateway** — VPC, ECS Fargate cluster, Docker image build, task role with Bedrock/S3/DynamoDB/IAM/STS/Secrets Manager permissions. ACPX enabled with MCP bridge to AgentCore Gateway. Depends on Storage
 4. **OpenClawApi** — HTTP/WebSocket API Gateway + webhook Lambda + SQS. NOT in messaging path — for future webhook-based channels. Depends on Storage, Identity
-5. **OpenClawMemory** — SSM parameter for AgentCore Memory store ID + IAM policy. Placeholder — memory store not yet created at runtime. Depends on Storage
-6. **OpenClawScheduler** — EventBridge rules (heartbeat 30min, consolidation nightly) + Lambda handlers (stubs). Depends on Storage
+5. **OpenClawMemory** — SSM parameters for AgentCore Memory store config (store ID, strategy IDs), IAM policy for memory access, ECR repository for MemoryAgent container. Memory store created by agent at first boot. Depends on Storage
+6. **OpenClawScheduler** — EventBridge rules (heartbeat 30min, consolidation nightly) + Lambda handlers. Depends on Storage
 7. **OpenClawBuilder** — Builder agent IAM role with permission boundary. Not yet used. Depends on Storage
 8. **OpenClawAgentCoreTools** — Lambda for `deploy_static_site`. Registered as AgentCore Gateway target. MCP bridge connects to it via ACPX. No dependencies
 9. **OpenClawComputeEnvironments** — 4 DynamoDB tables (environments, agent-roles, tool-registry, cost-ledger) + cleanup Lambda + EventBridge schedules (30min environments, 6hr roles) + agent-permission-boundary managed policy + SNS topic. No dependencies
+10. **OpenClawHealth** — CloudWatch alarms (task-down, CPU high, memory high), ECS task-stopped EventBridge rule, SNS health alerts topic. Depends on Gateway
 
 ## Adding a New Stack
 
@@ -72,7 +73,7 @@ Set in `gateway_stack.py` on the container definition:
 | `TENANT_ID` | `default-tenant` | S3 key prefix segment |
 | `AGENT_ID` | `default-agent` | S3 key prefix segment |
 | `PROVIDER` | `bedrock` | Model provider (`bedrock` or `anthropic`) |
-| `BEDROCK_MODEL_ID` | `amazon.nova-lite-v1:0` | Bedrock model to use |
+| `BEDROCK_MODEL_ID` | `us.anthropic.claude-sonnet-4-6` | Bedrock model to use |
 | `TELEGRAM_SECRET_NAME` | `openclaw/telegram-bot-token` | Secrets Manager secret name |
 | `OPENCLAW_ALLOW_INSECURE_PRIVATE_WS` | `1` | Allow private workspace access |
 | `AGENTCORE_GATEWAY_SECRET_NAME` | `openclaw/agentcore-gateway-credentials` | Secrets Manager secret for AgentCore Gateway MCP bridge OAuth2 credentials |
