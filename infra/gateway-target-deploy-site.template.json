@@ -1,0 +1,52 @@
+{
+    "_comment": "Template for AgentCore Gateway target registration. Replace LAMBDA_ARN with the actual ARN from the OpenClawAgentCoreTools stack output (DeployStaticSiteLambdaArn).",
+    "lambdaArn": "LAMBDA_ARN",
+    "toolSchema": {
+        "inlinePayload": [
+            {
+                "name": "deploy_static_site",
+                "description": "Deploy a static website to AWS. Creates an S3 bucket for hosting and a CloudFront distribution for HTTPS delivery. Provide the site name and HTML content. Returns the CloudFront URL where the site will be accessible within 5-10 minutes.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "site_name": {
+                            "type": "string",
+                            "description": "A short name for the website (e.g., 'my-portfolio', 'landing-page'). Used to name the S3 bucket."
+                        },
+                        "html_content": {
+                            "type": "string",
+                            "description": "The HTML content for the website's index page. Can be a full HTML document or a simple HTML snippet."
+                        },
+                        "index_document": {
+                            "type": "string",
+                            "description": "The filename for the index page. Defaults to 'index.html'."
+                        }
+                    },
+                    "required": ["site_name", "html_content"]
+                }
+            },
+            {
+                "name": "list_deployed_sites",
+                "description": "List all static websites that have been deployed by the agent. Returns the S3 bucket names of all agent-deployed sites.",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {}
+                }
+            },
+            {
+                "name": "delete_static_site",
+                "description": "Delete an agent-deployed static website. Removes the S3 bucket and all its contents. Only works on agent-deployed resources (prefixed with 'agent-').",
+                "inputSchema": {
+                    "type": "object",
+                    "properties": {
+                        "bucket_name": {
+                            "type": "string",
+                            "description": "The S3 bucket name of the site to delete. Must start with 'agent-'."
+                        }
+                    },
+                    "required": ["bucket_name"]
+                }
+            }
+        ]
+    }
+}

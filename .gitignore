@@ -139,6 +139,9 @@ changelog/fragments/
 # CDK synth output
 infra/cdk.out/
 infra/.venv/
+# Gateway target definitions contain account-specific Lambda ARNs
+infra/gateway-target-*.json
+!infra/gateway-target-*.template.json
 .venv
 .env
 local-scripts/
