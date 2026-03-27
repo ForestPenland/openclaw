@@ -1,36 +1,32 @@
 ---
 name: role-factory
-description: "Create and manage task-scoped IAM roles for elevated AWS permissions. Use when: (1) a task needs permissions beyond the base ECS task role, (2) creating resources that require specific IAM policies, (3) assuming temporary elevated access for a deployment. NOT for: read-only AWS queries (base role is sufficient), operations within the base permission set."
+description: "Create and manage task-scoped IAM roles for elevated AWS permissions. Use when a task needs permissions beyond the base ECS task role, creating resources that require specific IAM policies, or assuming temporary elevated access for a deployment."
 metadata:
-  {
-    "openclaw":
-      {
-        "emoji": "🔐",
-        "requires": { "bins": ["aws"] },
-      },
-  }
+  openclaw:
+    emoji: "🔐"
+    requires:
+      bins: ["aws"]
 ---
 
 # Role Factory Skill
 
-Create task-scoped IAM roles with elevated permissions when the base ECS task role is insufficient. All roles are constrained by the `agent-permission-boundary` managed policy.
+Create task-scoped IAM roles with elevated permissions when the base ECS
+task role is insufficient. All roles are constrained by the
+`agent-permission-boundary` managed policy.
 
-## When to Use
+## Core Rule: One Role Per Project, Never Shared
 
-✅ **USE this skill when:**
+Every agent, every build, every project gets its own dedicated IAM role.
+Do NOT reuse an existing agent's execution role for a new agent.
 
-- A task needs write permissions to services not covered by the base role
-- Creating AWS resources that require specific IAM policies
-- Deploying infrastructure that needs elevated access
-- Running operations that need temporary admin-like permissions (within boundary)
+## Naming Conventions
 
-## When NOT to Use
+All agent-managed roles MUST use the `agent-task-` prefix:
 
-❌ **DON'T create a role when:**
-
-- The base ECS task role already has the needed permissions
-- Running read-only queries (S3 list, describe stacks, etc.)
-- The operation is a simple AWS CLI command within existing permissions
+| Role type | Pattern | Example |
+|-----------|---------|---------|
+| Temporary task role | `agent-task-<purpose>-<timestamp>` | `agent-task-cognito-1774546167` |
+| Agent execution role | `agent-task-<agent-name>-exec` | `agent-task-memory-agent-exec` |
 
 ## Constraints
 
@@ -38,77 +34,62 @@ Create task-scoped IAM roles with elevated permissions when the base ECS task ro
 - All roles MUST have `agent-permission-boundary` attached
 - Maximum 5 concurrent active roles
 - Roles expire after 24 hours (cleanup Lambda deletes them)
-- STS session duration: default 1 hour, max 4 hours
-- Permission boundary denies: IAM (except scoped creation), Organizations, Account, Billing
+- Permission boundary enforces no cross-account role assumption
 
-## Creating a Task-Scoped Role
-
-### Step 1: Create the role with a trust policy
+## Pattern A: Temporary Task Role
 
 ```bash
-# Create trust policy document
-exec command:"cat > /tmp/trust-policy.json << 'EOF'
-{
-  \"Version\": \"2012-10-17\",
-  \"Statement\": [{
-    \"Effect\": \"Allow\",
-    \"Principal\": {
-      \"AWS\": \"$(aws sts get-caller-identity --query Arn --output text)\"
-    },
-    \"Action\": \"sts:AssumeRole\"
-  }]
-}
-EOF"
+ACCOUNT=$(aws sts get-caller-identity --query Account --output text)
+CALLER_ARN=$(aws sts get-caller-identity --query Arn --output text)
+ROLE_NAME="agent-task-<purpose>-$(date +%s)"
 
-# Create the role with permission boundary
-exec command:"aws iam create-role \
-  --role-name agent-task-$(date +%s) \
+# Create role with permission boundary
+cat > /tmp/trust-policy.json << EOF
+{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"AWS":"$CALLER_ARN"},"Action":"sts:AssumeRole"}]}
+EOF
+
+aws iam create-role \
+  --role-name "$ROLE_NAME" \
   --assume-role-policy-document file:///tmp/trust-policy.json \
-  --permissions-boundary arn:aws:iam::$(aws sts get-caller-identity --query Account --output text):policy/agent-permission-boundary \
-  --tags Key=Purpose,Value='CDK deployment' Key=CreatedBy,Value=agent"
+  --permissions-boundary arn:aws:iam::${ACCOUNT}:policy/agent-permission-boundary \
+  --tags Key=Purpose,Value="<description>" Key=CreatedBy,Value=agent
+
+# Attach scoped inline policy
+aws iam put-role-policy --role-name "$ROLE_NAME" --policy-name task-policy \
+  --policy-document file:///tmp/task-policy.json
+
+# Assume role
+aws sts assume-role \
+  --role-arn "arn:aws:iam::${ACCOUNT}:role/${ROLE_NAME}" \
+  --role-session-name "task-session" --duration-seconds 3600 > /tmp/creds.json
+
+export AWS_ACCESS_KEY_ID=$(python3 -c "import json; print(json.load(open('/tmp/creds.json'))['Credentials']['AccessKeyId'])")
+export AWS_SECRET_ACCESS_KEY=$(python3 -c "import json; print(json.load(open('/tmp/creds.json'))['Credentials']['SecretAccessKey'])")
+export AWS_SESSION_TOKEN=$(python3 -c "import json; print(json.load(open('/tmp/creds.json'))['Credentials']['SessionToken'])")
+
+# Do elevated work, then clean up
+unset AWS_ACCESS_KEY_ID AWS_SECRET_ACCESS_KEY AWS_SESSION_TOKEN
+aws iam delete-role-policy --role-name "$ROLE_NAME" --policy-name task-policy
+aws iam delete-role --role-name "$ROLE_NAME"
 ```
 
-### Step 2: Attach the needed policy
+## Pattern B: Agent Execution Role (Long-Lived)
+
+For AgentCore Runtime agents. Trust policy allows the AgentCore service:
 
 ```bash
-# Attach a managed policy or create an inline policy
-exec command:"aws iam put-role-policy \
-  --role-name agent-task-TIMESTAMP \
-  --policy-name task-policy \
-  --policy-document file:///tmp/task-policy.json"
+ROLE_NAME="agent-task-${AGENT_NAME}-exec"
+
+cat > /tmp/exec-trust-policy.json << 'EOF'
+{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"bedrock-agentcore.amazonaws.com"},"Action":"sts:AssumeRole"}]}
+EOF
+
+aws iam create-role \
+  --role-name "$ROLE_NAME" \
+  --assume-role-policy-document file:///tmp/exec-trust-policy.json \
+  --permissions-boundary arn:aws:iam::${ACCOUNT}:policy/agent-permission-boundary \
+  --tags Key=Purpose,Value="${AGENT_NAME}-runtime" Key=CreatedBy,Value=agent
 ```
 
-### Step 3: Assume the role
-
-```bash
-# Get temporary credentials
-exec command:"aws sts assume-role \
-  --role-arn arn:aws:iam::ACCOUNT:role/agent-task-TIMESTAMP \
-  --role-session-name agent-session \
-  --duration-seconds 3600"
-```
-
-### Step 4: Use the credentials
-
-```bash
-# Export the temporary credentials
-exec command:"export AWS_ACCESS_KEY_ID=... AWS_SECRET_ACCESS_KEY=... AWS_SESSION_TOKEN=..."
-
-# Run commands with elevated permissions
-exec command:"aws cloudformation create-stack ..."
-```
-
-### Step 5: Clean up (optional — auto-cleanup runs every 6 hours)
-
-```bash
-exec command:"aws iam delete-role-policy --role-name agent-task-TIMESTAMP --policy-name task-policy"
-exec command:"aws iam delete-role --role-name agent-task-TIMESTAMP"
-```
-
-## Notes
-
-- The permission boundary is a hard ceiling — even with AdministratorAccess attached, the boundary limits what the role can do
-- Roles are tracked in the `openclaw-agent-roles` DynamoDB table
-- A cleanup Lambda deletes roles older than 24 hours every 6 hours
-- Always check `canCreateRole()` before creating (max 5 concurrent)
-- Log the role purpose for audit trail
+Tag execution roles with `Purpose=*-runtime` to exempt them from the
+24-hour cleanup Lambda.
