@@ -86,8 +86,23 @@ export interface RoleManagerDeps {
 
 // ── Constants ──────────────────────────────────────────────────
 
-const ROLE_PREFIX 
-: deps.roleExpiryHours ?? DEFAULT_EXPIRY_HOURS,
+const ROLE_PREFIX = "agent-task-";
+const DEFAULT_MAX_CONCURRENT = 5;
+const DEFAULT_EXPIRY_HOURS = 24;
+const DEFAULT_SESSION_SECONDS = 3600;
+const MAX_SESSION_SECONDS = 14400;
+const INLINE_POLICY_NAME = "task-policy";
+
+// ── Implementation ─────────────────────────────────────────────
+
+export class RoleManager {
+  private readonly deps: Required<RoleManagerDeps>;
+
+  constructor(deps: RoleManagerDeps) {
+    this.deps = {
+      ...deps,
+      maxConcurrentRoles: deps.maxConcurrentRoles ?? DEFAULT_MAX_CONCURRENT,
+      roleExpiryHours: deps.roleExpiryHours ?? DEFAULT_EXPIRY_HOURS,
     };
   }
 

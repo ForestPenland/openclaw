@@ -2,17 +2,24 @@
 
 ## Introduction
 
-This document defines the requirements for a dynamic execution environment system that enables the OpenClaw agent to intelligently select and provision the right AWS compute environment for each task. The system uses OpenClaw's default ACPX coding sandbox as the agent's local workspace, with delegation to remote AWS compute services for heavy execution.
+This document defines the requirements for a dynamic execution environment system that enables the OpenClaw agent to intelligently select and provision the right AWS compute environment for each task. The system uses a hybrid execution model with two distinct paths:
 
-The approach is "local workspace + remote hands": ACPX provides the agent with a local coding environment (file editing, shell commands, code testing, MCP tools) where it drafts, validates, and prepares work. Heavy execution — CDK deployments, Docker builds, GPU workloads, persistent services — is delegated to remote AWS environments via shell commands (AWS CLI) and MCP tools (AgentCore Gateway).
+1. **Direct host execution**: The agent's built-in tools (`exec`, `read`, `write`, `edit`, `apply_patch`, `process`, `web_search`, `browser`) execute directly on the Fargate container host. AWS CLI is installed on the container and available via `exec` for direct AWS operations (S3, CloudFormation, EC2 queries, etc.).
 
-This builds on the existing OpenClaw AWS Extension (OpenClaw Gateway on Fargate, Bedrock provider, AgentCore Gateway with Lambda tools) and extends it with ACPX enablement, delegation skills, and lifecycle management for remote execution environments.
+2. **ACPX sandbox with MCP bridge**: For AgentCore Gateway tool access (deploy_static_site, manage_s3, etc.), the ACPX plugin provides a sandboxed coding environment where MCP servers run. The `mcp-gateway-bridge.mjs` (stdio-to-HTTP proxy with OAuth2) is configured under `plugins.acpx.mcpServers` so the agent can call Gateway tools from within ACPX sessions.
+
+SKILL.md files teach the agent when to use each path. Heavy execution — CDK deployments, Docker builds, GPU workloads, persistent services — is delegated to remote AWS compute environments via shell commands (AWS CLI).
+
+This builds on the existing OpenClaw AWS Extension (OpenClaw Gateway on Fargate, Bedrock provider, AgentCore Gateway with Lambda tools) and extends it with host execution skills, ACPX-based MCP tool access, delegation patterns, and lifecycle management for remote execution environments.
 
 ## Glossary
 
+- **Built-in Tools**: OpenClaw's native tools (`exec`, `read`, `write`, `edit`, `apply_patch`, `process`, `web_search`, `browser`) that execute directly on the Fargate container host
+- **ACPX**: OpenClaw's coding agent sandbox plugin — provides isolated file editing, code execution, and MCP tool integration. MCP servers configured under `plugins.acpx.mcpServers` run inside ACPX sessions, NOT in the main conversational session
+- **MCP Gateway Bridge**: The `mcp-gateway-bridge.mjs` script — a stdio-to-HTTP proxy that translates MCP JSON-RPC protocol to AgentCore Gateway HTTP calls with OAuth2 authentication. Configured under `plugins.acpx.mcpServers` so it runs inside ACPX sessions
+- **SKILL.md**: OpenClaw's natural language markdown format for teaching the agent capabilities — how to use AWS CLI, ACPX for MCP tools, delegation patterns, and more. Skills are uploaded to S3 and loaded by the Gateway at startup
 - **Execution Environment**: An AWS compute resource provisioned on demand to execute agent tasks (shell commands, code, deployments, builds)
 - **Compute Router**: The decision layer that analyzes task requirements and selects the optimal execution environment
-- **ACP Backend**: An implementation of OpenClaw's `AcpRuntime` interface that delegates execution to a remote AWS compute service
 - **Runtime Template**: A pre-configured execution environment definition (container image, IAM role, installed tools, resource limits)
 - **Session**: A stateful execution context within an environment, with persistent filesystem and environment variables
 - **Ephemeral Environment**: An environment that is created for a task and destroyed after completion
@@ -20,18 +27,19 @@ This builds on the existing OpenClaw AWS Extension (OpenClaw Gateway on Fargate,
 
 ## Requirements
 
-### Requirement 1: ACPX Local Workspace
+### Requirement 1: Host Execution + Skills + ACPX
 
-**User Story:** As an operator, I want the agent to have a local coding workspace via ACPX where it can draft code, test ideas, and prepare work before delegating heavy execution to remote environments.
+**User Story:** As an operator, I want the agent to use its built-in tools on the Fargate host for direct AWS operations and ACPX for MCP Gateway tool access, taught by SKILL.md files, so that it can perform AWS operations and access Gateway tools correctly.
 
 #### Acceptance Criteria
 
-1. THE Docker image (Dockerfile.gateway) SHALL include the `acpx` binary and its dependencies
-2. THE ACPX plugin SHALL be enabled in the openclaw.json configuration
-3. THE ACPX environment SHALL have access to MCP tools via the AgentCore Gateway bridge
-4. THE ACPX environment SHALL have the AWS CLI installed for delegation commands
-5. THE agent SHALL be able to perform local file operations, shell commands, and code testing within ACPX
-6. THE agent's SOUL.md SHALL instruct it to delegate heavy execution (deployments, builds, long-running tasks) to remote environments rather than running them locally
+1. SKILL.md files SHALL be created that teach the agent to use AWS CLI via the built-in `exec` tool, ACPX for MCP Gateway tools, and delegation patterns for CodeBuild, EC2, and ECS Fargate
+2. THE agent SHALL use its built-in `exec` tool to run AWS CLI commands on the Fargate host for direct AWS operations (S3, CloudFormation, EC2, etc.)
+3. THE ACPX plugin SHALL be enabled with the MCP gateway bridge configured under `plugins.acpx.mcpServers` for AgentCore Gateway tool access (deploy_static_site, manage_s3, etc.)
+4. THE SOUL.md SHALL instruct the agent on when to use `exec` + AWS CLI (direct operations) vs ACPX (MCP Gateway tools) vs delegation (heavy execution)
+5. Skills SHALL be uploaded to S3 under the agent's workspace prefix and loaded by the Gateway at startup
+6. THE Docker image SHALL include the ACPX binary since MCP tools require ACPX sessions to function
+7. THE `configure-gateway.mjs` script SHALL write MCP bridge config to `plugins.acpx.mcpServers` (not `mcp.servers`) and handle OpenClaw's config overwrite behavior by setting `meta.lastTouchedVersion`
 
 ### Requirement 2: AgentCore Runtime Backend (Quick Interactive Tasks)
 
@@ -96,18 +104,18 @@ This builds on the existing OpenClaw AWS Extension (OpenClaw Gateway on Fargate,
 1. THE compute router SHALL analyze task text and metadata to determine: estimated duration, resource requirements (CPU, memory, GPU), required tools, persistence needs, and cost sensitivity
 2. THE compute router SHALL apply the following default routing rules:
 
-| Task Characteristic | Recommended Backend |
-|---|---|
-| Quick command (< 5 min), interactive | AgentCore Runtime |
-| Code testing, file operations | AgentCore Runtime |
-| CDK deploy, CloudFormation stack creation | CodeBuild |
-| Docker image build | CodeBuild |
-| CI/CD pipeline execution | CodeBuild |
-| GPU workload (ML training, inference) | EC2 (GPU instance) |
-| Long-running process (> 8 hours) | EC2 |
-| Custom OS/kernel requirements | EC2 (custom AMI) |
-| Persistent API service | ECS Fargate |
-| Batch data processing | AgentCore Runtime or CodeBuild |
+| Task Characteristic                       | Recommended Backend            |
+| ----------------------------------------- | ------------------------------ |
+| Quick command (< 5 min), interactive      | AgentCore Runtime              |
+| Code testing, file operations             | AgentCore Runtime              |
+| CDK deploy, CloudFormation stack creation | CodeBuild                      |
+| Docker image build                        | CodeBuild                      |
+| CI/CD pipeline execution                  | CodeBuild                      |
+| GPU workload (ML training, inference)     | EC2 (GPU instance)             |
+| Long-running process (> 8 hours)          | EC2                            |
+| Custom OS/kernel requirements             | EC2 (custom AMI)               |
+| Persistent API service                    | ECS Fargate                    |
+| Batch data processing                     | AgentCore Runtime or CodeBuild |
 
 3. THE compute router SHALL allow the agent to override the default selection with an explicit backend choice
 4. THE compute router SHALL log every routing decision with the task description, selected backend, and reasoning for observability
