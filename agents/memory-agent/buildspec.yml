@@ -1,0 +1,18 @@
+version: 0.2
+env:
+  variables:
+    AGENT_NAME: "memory-agent"
+phases:
+  pre_build:
+    commands:
+      - ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+      - aws ecr get-login-password --region $AWS_DEFAULT_REGION | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com
+      - REPO_URI=${ACCOUNT_ID}.dkr.ecr.${AWS_DEFAULT_REGION}.amazonaws.com/${AGENT_NAME}
+      - TAG=$(date +%Y%m%d%H%M%S)
+  build:
+    commands:
+      - docker buildx create --use --name multiarch || true
+      - docker buildx build --platform linux/arm64 -t $REPO_URI:$TAG -t $REPO_URI:latest --push .
+  post_build:
+    commands:
+      - echo "Build complete. Image pushed as $REPO_URI:$TAG and $REPO_URI:latest"
