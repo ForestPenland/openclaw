@@ -36,6 +36,7 @@ from stacks.scheduler_stack import SchedulerStack
 from stacks.builder_stack import BuilderStack
 from stacks.agentcore_gateway_stack import AgentCoreGatewayStack
 from stacks.compute_environments_stack import ComputeEnvironmentsStack
+from stacks.health_stack import HealthStack
 
 app = cdk.App()
 
@@ -91,5 +92,15 @@ agentcore_gw = AgentCoreGatewayStack(app, "OpenClawAgentCoreTools")
 # --- Compute Environments (dynamic execution) ---
 
 compute_envs = ComputeEnvironmentsStack(app, "OpenClawComputeEnvironments")
+
+# --- Health Monitoring ---
+
+health = HealthStack(
+    app,
+    "OpenClawHealth",
+    cluster_name=gateway.cluster.cluster_name,
+    service_name=gateway.service.service_name,
+)
+health.add_dependency(gateway)
 
 app.synth()
