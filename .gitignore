@@ -134,9 +134,37 @@ ui/src/ui/__screenshots__
 ui/src/ui/views/__screenshots__
 ui/.vitest-attachments
 docs/superpowers
-
-# Deprecated changelog fragment workflow
 changelog/fragments/
 
 # CDK synth output
 infra/cdk.out/
+infra/.venv/
+.venv
+.env
+local-scripts/
+
+# ── Security: credentials and keys (NEVER COMMIT) ──────────
+*.pem
+*.key
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.credentials
+*.secret
+!*.secret.ts
+!*.secret.test.ts
+*.tfstate
+*.tfstate.backup
+*.tfvars
+.aws/credentials
+.ssh/
+
+# ── AWS-specific ────────────────────────────────────────────
+# Terraform (if ever used alongside CDK)
+.terraform/
+terraform.tfstate*
+# SAM
+.aws-sam/
+# Amplify
+amplify/#current-cloud-backend/
