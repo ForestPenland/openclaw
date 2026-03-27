@@ -36,7 +36,6 @@ from stacks.scheduler_stack import SchedulerStack
 from stacks.builder_stack import BuilderStack
 from stacks.agentcore_gateway_stack import AgentCoreGatewayStack
 from stacks.compute_environments_stack import ComputeEnvironmentsStack
-from stacks.health_stack import HealthStack
 
 app = cdk.App()
 
@@ -93,14 +92,18 @@ agentcore_gw = AgentCoreGatewayStack(app, "OpenClawAgentCoreTools")
 
 compute_envs = ComputeEnvironmentsStack(app, "OpenClawComputeEnvironments")
 
-# --- Health Monitoring ---
+# --- Health Monitoring (opt-in via context flag) ---
+# Skip by default to avoid duplicating agent-created health monitoring.
+# Enable with: cdk deploy --context deploy_health_stack=true
+if app.node.try_get_context("deploy_health_stack") == "true":
+    from stacks.health_stack import HealthStack
 
-health = HealthStack(
-    app,
-    "OpenClawHealth",
-    cluster_name=gateway.cluster.cluster_name,
-    service_name=gateway.service.service_name,
-)
-health.add_dependency(gateway)
+    health = HealthStack(
+        app,
+        "OpenClawHealth",
+        cluster_name=gateway.cluster.cluster_name,
+        service_name=gateway.service.service_name,
+    )
+    health.add_dependency(gateway)
 
 app.synth()
